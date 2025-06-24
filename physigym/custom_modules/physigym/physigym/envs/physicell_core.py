@@ -64,18 +64,20 @@ COLORS = [tuple(calculate_rgb(c) for c in color) for color in base_colors]
 # bue 20250620: colors alternative using standard libraries
 #
 # from matplotlib import cm, colors
+# import matplotlib.pyplot as plt
 # import skimage as ski
 #
 # # number of colors
 # n = 19
 #
 # # rainbow
-# np.array(cm.turbo.colors)[0:256:int(np.floor(256/n))]  # float
-# ski.util.img_as_ubyte(np.array(cm.turbo.colors)[0:256:int(np.floor(256/n))])  # uint8
-# [colors.to_hex(color) for color in np.array(cm.turbo.colors)[0:256:int(np.floor(256/n))]]  # hex
+# np.array(cm.turbo.colors)[0:256:int(np.floor(256/n))]   # float numpy
+# plt.get_cmap("turbo", n).colors   # float matplotlib
+# ski.util.img_as_ubyte(plt.get_cmap("turbo", n).colors)   # uint8
+# [colors.to_hex(color) for color in plt.get_cmap("turbo", n).colors]   # hex
 #
 # # gray
-# ski.color.rgb2gray(np.array(cm.turbo.colors)[0:256:int(np.floor(256/n))])
+# ski.color.rgb2gray(plt.get_cmap("turbo", n).colors)])
 
 
 class CorePhysiCellEnv(gymnasium.Env):
