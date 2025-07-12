@@ -379,8 +379,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         description:
             cost function.
         """
-        return (self.c_prev - self.c_t) / np.log(self.kwargs["normalization_factor"])
-
+        r_reward_tumor = (self.c_prev - self.c_t) / (self.c_prev - (self.c_prev * np.e**(physicell.get_parameter("r_growth") * physicell.get_parameter("dt_gym"))))
+        r_reward_tumor = np.clip(r_kill, -1, 1)
+        return = r_reward_tumor
 
     def get_img(self):
         """
@@ -421,23 +422,23 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             alpha=1/3,
         )
 
-        # pro-tumoral factor
-        df_conc = pd.DataFrame(physicell.get_microenv("pro-tumoral factor"), columns=["x","y","z","pro-tumoral factor"])
+        # pro-inflammatory factor
+        df_conc = pd.DataFrame(physicell.get_microenv("pro-inflammatory factor"), columns=["x","y","z","pro-inflammatory factor"])
         df_conc = df_conc.loc[df_conc.z == 0.0, :]
-        df_mesh = df_conc.pivot(index="y", columns="x", values="pro-tumoral factor")
-        ax.contourf(
-            df_mesh.columns, df_mesh.index, df_mesh.values,
-            vmin=0.0, vmax=1.0, cmap="Blues",
-            alpha=1/3,
-        )
-
-        # anti-tumoral factor
-        df_conc = pd.DataFrame(physicell.get_microenv("anti-tumoral factor"), columns=["x","y","z","anti-tumoral factor"])
-        df_conc = df_conc.loc[df_conc.z == 0.0, :]
-        df_mesh = df_conc.pivot(index="y", columns="x", values="anti-tumoral factor")
+        df_mesh = df_conc.pivot(index="y", columns="x", values="pro-inflammatory factor")
         ax.contourf(
             df_mesh.columns, df_mesh.index, df_mesh.values,
             vmin=0.0, vmax=1.0, cmap="Greens",
+            alpha=1/3,
+        )
+
+        # anti-inflammatory factor
+        df_conc = pd.DataFrame(physicell.get_microenv("anti-inflammatory factor"), columns=["x","y","z","anti-inflammatory factor"])
+        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_mesh = df_conc.pivot(index="y", columns="x", values="anti-inflammatory factor")
+        ax.contourf(
+            df_mesh.columns, df_mesh.index, df_mesh.values,
+            vmin=0.0, vmax=1.0, cmap="Blues",
             alpha=1/3,
         )
 

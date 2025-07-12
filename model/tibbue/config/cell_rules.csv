@@ -1,8 +1,7 @@
 tumor,pressure,decreases,cycle entry,0,5,3,0
-tumor,pressure,increases,necrosis,28e-4,10,3,0
-tumor,pro-tumoral factor,decreases,apoptosis,0,5,10,0
-tumor,anti-tumoral factor,increases,apoptosis,0.05,1,2,0
+tumor,pro-inflammatory factor,decreases,apoptosis,0,5,10,0
+tumor,anti-inflammatory factor,increases,apoptosis,0.05,1,2,0
 tumor,dead,increases,debris secretion,0.25,0.2,5,1
 cell_1,pressure,increases,transform to cell_2,1,11,4,0
-cell_1,pro-tumoral factor,decreases,anti-tumoral factor secretion,0,10,4,0
+cell_1,pro-inflammatory factor,decreases,anti-inflammatory factor secretion,0,10,4,0
 cell_2,drug_1,increases,transform to cell_1,1,5,4,0

@@ -42,7 +42,7 @@
             <enable>true</enable>
         </full_data>
         <SVG>
-            <interval units="min">60</interval>
+            <interval units="min">12</interval>
             <enable>false</enable>
             <plot_substrate enabled="false" limits="false">
                 <substrate>debris</substrate>
@@ -71,47 +71,15 @@
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False"/>
-                <boundary_value ID="xmax" enabled="False"/>
-                <boundary_value ID="ymin" enabled="False"/>
-                <boundary_value ID="ymax" enabled="False"/>
-                <boundary_value ID="zmin" enabled="False"/>
-                <boundary_value ID="zmax" enabled="False"/>
+                <boundary_value ID="xmin" enabled="False" />
+                <boundary_value ID="xmax" enabled="False" />
+                <boundary_value ID="ymin" enabled="False" />
+                <boundary_value ID="ymax" enabled="False" />
+                <boundary_value ID="zmin" enabled="False" />
+                <boundary_value ID="zmax" enabled="False" />
             </Dirichlet_options>
         </variable>
-        <variable name="anti-tumoral factor" units="dimensionless" ID="1">
-            <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">1000.0</diffusion_coefficient>
-                <decay_rate units="1/min">0.05</decay_rate>
-            </physical_parameter_set>
-            <initial_condition units="dimensionless">0.0</initial_condition>
-            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
-            <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False"/>
-                <boundary_value ID="xmax" enabled="False"/>
-                <boundary_value ID="ymin" enabled="False"/>
-                <boundary_value ID="ymax" enabled="False"/>
-                <boundary_value ID="zmin" enabled="False"/>
-                <boundary_value ID="zmax" enabled="False"/>
-            </Dirichlet_options>
-        </variable>
-        <variable name="pro-tumoral factor" units="dimensionless" ID="2">
-            <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">1000.0</diffusion_coefficient>
-                <decay_rate units="1/min">0.1</decay_rate>
-            </physical_parameter_set>
-            <initial_condition units="dimensionless">0.0</initial_condition>
-            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
-            <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False"/>
-                <boundary_value ID="xmax" enabled="False"/>
-                <boundary_value ID="ymin" enabled="False"/>
-                <boundary_value ID="ymax" enabled="False"/>
-                <boundary_value ID="zmin" enabled="False"/>
-                <boundary_value ID="zmax" enabled="False"/>
-            </Dirichlet_options>
-        </variable>
-        <variable name="drug_1" units="dimensionless" ID="3">
+        <variable name="drug_1" units="dimensionless" ID="1">
             <physical_parameter_set>
                 <diffusion_coefficient units="micron^2/min">0</diffusion_coefficient>
                 <decay_rate units="1/min">0.01</decay_rate>
@@ -123,8 +91,40 @@
                 <boundary_value ID="xmax" enabled="True">0</boundary_value>
                 <boundary_value ID="ymin" enabled="True">0</boundary_value>
                 <boundary_value ID="ymax" enabled="True">0</boundary_value>
-                <boundary_value ID="zmin" enabled="False"/>
-                <boundary_value ID="zmax" enabled="False"/>
+                <boundary_value ID="zmin" enabled="False" />
+                <boundary_value ID="zmax" enabled="False" />
+            </Dirichlet_options>
+        </variable>
+        <variable name="anti-inflammatory factor" units="dimensionless" ID="2">
+            <physical_parameter_set>
+                <diffusion_coefficient units="micron^2/min">1000.0</diffusion_coefficient>
+                <decay_rate units="1/min">0.05</decay_rate>
+            </physical_parameter_set>
+            <initial_condition units="dimensionless">0.0</initial_condition>
+            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
+            <Dirichlet_options>
+                <boundary_value ID="xmin" enabled="False" />
+                <boundary_value ID="xmax" enabled="False" />
+                <boundary_value ID="ymin" enabled="False" />
+                <boundary_value ID="ymax" enabled="False" />
+                <boundary_value ID="zmin" enabled="False" />
+                <boundary_value ID="zmax" enabled="False" />
+            </Dirichlet_options>
+        </variable>
+        <variable name="pro-inflammatory factor" units="dimensionless" ID="3">
+            <physical_parameter_set>
+                <diffusion_coefficient units="micron^2/min">1000.0</diffusion_coefficient>
+                <decay_rate units="1/min">0.1</decay_rate>
+            </physical_parameter_set>
+            <initial_condition units="dimensionless">0.0</initial_condition>
+            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
+            <Dirichlet_options>
+                <boundary_value ID="xmin" enabled="False" />
+                <boundary_value ID="xmax" enabled="False" />
+                <boundary_value ID="ymin" enabled="False" />
+                <boundary_value ID="ymax" enabled="False" />
+                <boundary_value ID="zmin" enabled="False" />
+                <boundary_value ID="zmax" enabled="False" />
             </Dirichlet_options>
         </variable>
         <options>
@@ -229,9 +229,9 @@
                             <normalize_each_gradient>false</normalize_each_gradient>
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="anti-tumoral factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="pro-tumoral factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="drug_1">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="anti-inflammatory factor">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="pro-inflammatory factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
@@ -244,22 +244,22 @@
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="anti-tumoral factor">
-                        <secretion_rate units="1/min">0.0</secretion_rate>
-                        <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">10.0</uptake_rate>
-                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
-                    </substrate>
-                    <substrate name="pro-tumoral factor">
-                        <secretion_rate units="1/min">0.0</secretion_rate>
-                        <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">10.0</uptake_rate>
-                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
-                    </substrate>
                     <substrate name="drug_1">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="anti-inflammatory factor">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">10.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="pro-inflammatory factor">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">10.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                 </secretion>
@@ -392,9 +392,9 @@
                             <normalize_each_gradient>false</normalize_each_gradient>
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="anti-tumoral factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="pro-tumoral factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="drug_1">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="anti-inflammatory factor">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="pro-inflammatory factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
@@ -407,20 +407,20 @@
                         <uptake_rate units="1/min">10.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="anti-tumoral factor">
+                    <substrate name="drug_1">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="anti-inflammatory factor">
                         <secretion_rate units="1/min">10</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="pro-tumoral factor">
+                    <substrate name="pro-inflammatory factor">
                         <secretion_rate units="1/min">0</secretion_rate>
-                        <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">0.0</uptake_rate>
-                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
-                    </substrate>
-                    <substrate name="drug_1">
-                        <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
@@ -555,9 +555,9 @@
                             <normalize_each_gradient>false</normalize_each_gradient>
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris">0.2</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="anti-tumoral factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="pro-tumoral factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="drug_1">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="anti-inflammatory factor">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="pro-inflammatory factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
@@ -570,20 +570,20 @@
                         <uptake_rate units="1/min">10.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="anti-tumoral factor">
+                    <substrate name="drug_1">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="anti-inflammatory factor">
                         <secretion_rate units="1/min">0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="pro-tumoral factor">
+                    <substrate name="pro-inflammatory factor">
                         <secretion_rate units="1/min">10</secretion_rate>
-                        <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">0.0</uptake_rate>
-                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
-                    </substrate>
-                    <substrate name="drug_1">
-                        <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
@@ -642,6 +642,7 @@
         <number_of_cells type="int" units="none" description="initial number of cells (for each cell type)">0</number_of_cells>
         <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">60</dt_gym>
         <time type="double" units="min" description="necessary for PhysiGym, never delete!">0.0</time>
-        <drug_1 type="double" units="" description="">0</drug_1>
+        <drug_1 type="double" units="[0..1]" description="drug amount added right in the beginning of the time step">0</drug_1>
+        <r_growth type="double" units="1/min" description="netto growth rate tumor ">0.000049</r_growth>
     </user_parameters>
 </PhysiCell_settings>
