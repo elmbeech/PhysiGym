@@ -125,12 +125,6 @@ class PhysiCellModelWrapper(gymnasium.Wrapper):
         d_info["reward_tumor"] = r_reward_tumor
         d_info["reward_drug"] = r_reward_drug
 
-                "drug_max","anti_inflammatory_factor_max","pro_inflammatory_factor_max","debris_max"
-                "drug_median","anti_inflammatory_factor_median","pro_inflammatory_factor_median","debris_median"
-                "drug_mean","anti_inflammatory_factor_mean","pro_inflammatory_factor_mean","debris_mean"
-                "drug_std","anti_inflammatory_factor_std","pro_inflammatory_factor_std","debris_std"
-                "drug_min","anti_inflammatory_factor_min","pro_inflammatory_factor_min","debris_min"
-
         # going home
         return o_observation, r_reward, b_terminated, b_truncated, d_info
 

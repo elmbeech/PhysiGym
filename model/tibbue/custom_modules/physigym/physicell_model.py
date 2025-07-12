@@ -392,7 +392,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         description:
             cost function.
         """
-        r_reward_tumor = (self.c_prev - self.c_t) / (self.c_prev - (self.c_prev * np.e**(physicell.get_parameter("r_growth") * physicell.get_parameter("dt_gym"))))
+        r_reward_tumor = (self.c_prev - self.c_t) / ((self.c_prev * np.e**(physicell.get_parameter("r_growth") * physicell.get_parameter("dt_gym")) - self.c_prev)
         r_reward_tumor = np.clip(r_kill, -1, 1)
         return = r_reward_tumor
 
