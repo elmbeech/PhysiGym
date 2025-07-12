@@ -208,6 +208,18 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         """
         # model dependent observation processing logic goes here!
 
+        # get substrate data frame
+        self.df_subs = None
+        for s_subs in self.substrate_unique():
+            df_subs = pd.DataFrame(
+                physicell.get_microenv(s_subs),
+                columns=["x", "y", "z", s_subs]
+            )
+            if self.df_subs is None:
+                self.df_subs = df_subs
+            else:
+                self.df_subs = pd.merge(self.df_subs, df_subs, on=["x","y","z"])
+
         # get cell data frame
         self.df_cell = pd.DataFrame(
             physicell.get_cell(),
@@ -315,6 +327,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         # model dependent info processing logic goes here!
         info = {
             "df_cell": self.df_cell,
+            "df_subs": self.df_subs,
             "number_tumor": self.nb_tumor,
             "number_cell_1": self.nb_cell_1,
             "number_cell_2": self.nb_cell_2,
@@ -413,8 +426,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         ##################
 
         # debris
-        df_conc = pd.DataFrame(physicell.get_microenv("debris"), columns=["x","y","z","debris"])
-        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_conc = self.df_subs.loc[df_conc.z == 0.0, ["x","y","z","debris"]]
         df_mesh = df_conc.pivot(index="y", columns="x", values="debris")
         ax.contourf(
             df_mesh.columns, df_mesh.index, df_mesh.values,
@@ -423,8 +435,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         )
 
         # pro-inflammatory factor
-        df_conc = pd.DataFrame(physicell.get_microenv("pro-inflammatory factor"), columns=["x","y","z","pro-inflammatory factor"])
-        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_conc = self.df_subs.loc[df_conc.z == 0.0, ["x","y","z","pro-inflammatory factor"]]
         df_mesh = df_conc.pivot(index="y", columns="x", values="pro-inflammatory factor")
         ax.contourf(
             df_mesh.columns, df_mesh.index, df_mesh.values,
@@ -433,8 +444,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         )
 
         # anti-inflammatory factor
-        df_conc = pd.DataFrame(physicell.get_microenv("anti-inflammatory factor"), columns=["x","y","z","anti-inflammatory factor"])
-        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_conc = self.df_subs.loc[df_conc.z == 0.0, ["x","y","z","anti-inflammatory factor"]]
         df_mesh = df_conc.pivot(index="y", columns="x", values="anti-inflammatory factor")
         ax.contourf(
             df_mesh.columns, df_mesh.index, df_mesh.values,

@@ -120,10 +120,16 @@ class PhysiCellModelWrapper(gymnasium.Wrapper):
         r_reward = self.r_weight * r_reward_tumor + (1 - self.r_weight) * r_reward_drug
 
         # update the info dictionary
-        d_info["action"] = d_action
+        d_info["action"] = d_action  # drug_added
         d_info["reward"] = r_reward
-        d_info["reward_drug"] = r_reward_drug
         d_info["reward_tumor"] = r_reward_tumor
+        d_info["reward_drug"] = r_reward_drug
+
+                "drug_max","anti_inflammatory_factor_max","pro_inflammatory_factor_max","debris_max"
+                "drug_median","anti_inflammatory_factor_median","pro_inflammatory_factor_median","debris_median"
+                "drug_mean","anti_inflammatory_factor_mean","pro_inflammatory_factor_mean","debris_mean"
+                "drug_std","anti_inflammatory_factor_std","pro_inflammatory_factor_std","debris_std"
+                "drug_min","anti_inflammatory_factor_min","pro_inflammatory_factor_min","debris_min"
 
         # going home
         return o_observation, r_reward, b_terminated, b_truncated, d_info
@@ -428,7 +434,26 @@ def run(
     )
 
     # initialize csv recording
-    ld_data = []
+    s_dir_pcoutput = "output/"
+    os.makedirs(s_dir_pcoutput, exist_ok=True)
+
+    ls_columns = [
+        "episode","step_episode","step_env","time_env",
+        "cumulative_return","discounted_cumulative_return",
+        "reward","reward_tumor","reward_drug",
+        "terminated","truncated","over",
+        "tumor","cell_1","cell_2",  # count
+        "drug_added",
+        "drug_max","anti_inflammatory_factor_max","pro_inflammatory_max","debris_max"
+        "drug_median","anti_inflammatory_median","pro_inflammatory_median","debris_median"
+        "drug_mean","anti_inflammatory_mean","pro_inflammatory_mean","debris_mean"
+        "drug_std","anti_inflammatory_std","pro_inflammatory_std","debris_std"
+        "drug_min","anti_inflammatory_min","pro_inflammatory_min","debris_min"
+    ]
+    s_csv_record = os.path.join(s_dir_pcoutput, "record.csv")
+    f = open(s_csv_record, "w")
+    f.writelines(ls_columns)
+    f.close()
 
     # set random seed
     random.seed(d_arg["seed"])
@@ -483,9 +508,15 @@ def run(
     # do reinforcement
     while env.unwrapped.step_env < d_arg["total_timesteps"]:
 
-        # manipulate setting xml before reset
-        # bue can be used for track or not track stuff, e.g. every 1024 episode
-        #env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"output/episode{str(i_episode).zfill(8)}"
+        # manipulate setting xml before reset to record full physicell run every 1024 episode.
+        if env.unwrapped.episode % 1024 == 0:
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/episode{str(env.unwrapped.episode).zfill(8)}"
+            env.get_wrapper_attr("x_root")xpath("//save/full_data/enable")[0].text = "true"
+            env.get_wrapper_attr("x_root")xpath("//save/SVG/enable")[0].text = "false"
+        else:
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/devnull}"
+            env.get_wrapper_attr("x_root")xpath("//save/full_data/enable")[0].text = "false"
+            env.get_wrapper_attr("x_root")xpath("//save/SVG/enable")[0].text = "false"
 
         # reset gymnasium env
         r_cumulative_return = 0
@@ -613,30 +644,36 @@ def run(
             writer.add_scalar("env/reward_drugs", d_info["reward_drugs"], env.unwrapped.episode)
 
             # record step to csv
-            d_data = {
-                "step": env.unwrapped.step_episode,
-                "reward": r_reward,
-                "cumulative_return": r_cumulative_return,
-                "discounted_cumulative_return": r_discounted_cumulative_return,
-                "drug_1": a_action[0],
-                "number_tumor": d_info["number_tumor"],
-                "number_cell_1": d_info["number_cell_1"],
-                "number_cell_2": d_info["number_cell_2"],
-            }
-            ld_data.append(d_data)
+            se_subs_max = d_info["df_subs"].max()
+            se_subs_median = d_info["df_subs"].median()
+            se_subs_mean = d_info["df_subs"].mean()
+            se_subs_std = d_info["df_subs"].std()
+            se_subs_min = d_info["df_subs"].min()
+            l_data = [
+                env.unwrapped.episode, env.unwrapped.step_episode, env.unwrapped.step_env, env.unwrapped.time_simulation,
+                r_cumulative_return, r_discounted_cumulative_return,
+                r_reward, d_info["reward_tumor"], d_info["reward_drug"],
+                b_terminated, b_truncated, b_episode_over,
+                d_info["number_tumor"], d_info["number_cell_1"], d_info["number_cell_2"],
+                d_info["action"]["drug_1"][0],
+                se_subs_max["drug_1"], se_subs_max["anti-inflammatory factor"], se_subs_max["pro-inflammatory factor"], se_subs_max["debris"],
+                se_subs_median["drug_1"], se_subs_median["anti-inflammatory factor"], se_subs_median["pro-inflammatory factor"], se_subs_median["debris"],
+                se_subs_mean["drug_1"], se_subs_mean["anti-inflammatory factor"], se_subs_mean["pro-inflammatory factor"], se_subs_mean["debris"],
+                se_subs_std["drug_1"], se_subs_std["anti-inflammatory factor"], se_subs_std["pro-inflammatory factor"], se_subs_std["debris"],
+                se_subs_min["drug_1"], se_subs_min["anti-inflammatory factor"], se_subs_min["pro-inflammatory factor"], se_subs_min["debris"],
+            ]
+            f = open(s_csv_record, "a")
+            f.writelines(l_data)
+            f.close()
 
         # recording episode to tensorbord
-        writer.add_scalar("charts/episodic_cumulative_return", r_cumulative_return / env.unwrapped.step_episode, env.unwrapped.episode)
         writer.add_scalar("charts/cumulative_return", r_cumulative_return, env.unwrapped.episode)
+        writer.add_scalar("charts/episodic_cumulative_return", r_cumulative_return / env.unwrapped.step_episode, env.unwrapped.episode)
         writer.add_scalar("charts/episodic_length", env.unwrapped.step_episode, env.unwrapped.episode)
         writer.add_scalar("charts/discounted_cumulative_return", r_discounted_cumulative_return, env.unwrapped.episode)
 
         # recording episode to csv
-        df = pd.DataFrame(ld_data)
-        s_dir_data_episode = os.path.join(s_dir_data, str(env.unwrapped.episode))
-        os.makedirs(s_dir_data_episode, exist_ok=True)
-        df.to_csv(os.path.join(s_dir_data_episode, "data.csv"), index=False)
-        ld_data = []
+        # pass
 
     # finish
     env.close()
