@@ -505,12 +505,12 @@ def run(
         # manipulate setting xml before reset to record full physicell run every 1024 episode.
         if env.unwrapped.episode % 1024 == 0:
             env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/episode{str(env.unwrapped.episode).zfill(8)}"
-            env.get_wrapper_attr("x_root")xpath("//save/full_data/enable")[0].text = "true"
-            env.get_wrapper_attr("x_root")xpath("//save/SVG/enable")[0].text = "false"
+            env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[0].text = "true"
+            env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = "false"
         else:
-            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/devnull}"
-            env.get_wrapper_attr("x_root")xpath("//save/full_data/enable")[0].text = "false"
-            env.get_wrapper_attr("x_root")xpath("//save/SVG/enable")[0].text = "false"
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/devnull"
+            env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[0].text = "false"
+            env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = "false"
 
         # reset gymnasium env
         r_cumulative_return = 0
@@ -635,7 +635,7 @@ def run(
             writer.add_scalar("env/number_cell_2", d_info["number_cell_2"], env.unwrapped.episode)
             writer.add_scalar("env/reward", r_reward, env.unwrapped.episode)
             writer.add_scalar("env/reward_tumor", d_info["reward_tumor"], env.unwrapped.episode)
-            writer.add_scalar("env/reward_drugs", d_info["reward_drugs"], env.unwrapped.episode)
+            writer.add_scalar("env/reward_drug", d_info["reward_drug"], env.unwrapped.episode)
 
             # record step to csv
             se_subs_max = d_info["df_subs"].max()
@@ -644,17 +644,17 @@ def run(
             se_subs_std = d_info["df_subs"].std()
             se_subs_min = d_info["df_subs"].min()
             l_data = [
-                env.unwrapped.episode, env.unwrapped.step_episode, env.unwrapped.step_env, env.unwrapped.time_simulation,
-                r_cumulative_return, r_discounted_cumulative_return,
-                r_reward, d_info["reward_tumor"], d_info["reward_drug"],
-                b_terminated, b_truncated, b_episode_over,
-                d_info["number_tumor"], d_info["number_cell_1"], d_info["number_cell_2"],
-                d_info["action"]["drug_1"][0],
-                se_subs_max["drug_1"], se_subs_max["anti-inflammatory factor"], se_subs_max["pro-inflammatory factor"], se_subs_max["debris"],
-                se_subs_median["drug_1"], se_subs_median["anti-inflammatory factor"], se_subs_median["pro-inflammatory factor"], se_subs_median["debris"],
-                se_subs_mean["drug_1"], se_subs_mean["anti-inflammatory factor"], se_subs_mean["pro-inflammatory factor"], se_subs_mean["debris"],
-                se_subs_std["drug_1"], se_subs_std["anti-inflammatory factor"], se_subs_std["pro-inflammatory factor"], se_subs_std["debris"],
-                se_subs_min["drug_1"], se_subs_min["anti-inflammatory factor"], se_subs_min["pro-inflammatory factor"], se_subs_min["debris"],
+                str(env.unwrapped.episode), str(env.unwrapped.step_episode), str(env.unwrapped.step_env), str(env.unwrapped.time_simulation),
+                str(r_cumulative_return), str(r_discounted_cumulative_return),
+                str(r_reward), str(d_info["reward_tumor"]), str(d_info["reward_drug"]),
+                str(b_terminated), str(b_truncated), str(b_episode_over),
+                str(d_info["number_tumor"]), str(d_info["number_cell_1"]), str(d_info["number_cell_2"]),
+                str(d_info["action"]["drug_1"][0]),
+                str(se_subs_max["drug_1"]), str(se_subs_max["anti-inflammatory factor"]), str(se_subs_max["pro-inflammatory factor"]), str(se_subs_max["debris"]),
+                str(se_subs_median["drug_1"]), str(se_subs_median["anti-inflammatory factor"]), str(se_subs_median["pro-inflammatory factor"]), str(se_subs_median["debris"]),
+                str(se_subs_mean["drug_1"]), str(se_subs_mean["anti-inflammatory factor"]), str(se_subs_mean["pro-inflammatory factor"]), str(se_subs_mean["debris"]),
+                str(se_subs_std["drug_1"]), str(se_subs_std["anti-inflammatory factor"]), str(se_subs_std["pro-inflammatory factor"]), str(se_subs_std["debris"]),
+                str(se_subs_min["drug_1"]), str(se_subs_min["anti-inflammatory factor"]), str(se_subs_min["pro-inflammatory factor"]), str(se_subs_min["debris"]),
             ]
             f = open(s_csv_record, "a")
             f.writelines(l_data)
