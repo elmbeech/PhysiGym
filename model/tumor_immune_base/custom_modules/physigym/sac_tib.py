@@ -19,7 +19,7 @@
 import os
 import random
 import time
-from dataclasses import dataclass
+import argparse
 
 # Gymnasium PhysiCell bridge module
 import physigym
@@ -34,7 +34,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils import tensorboard
 from tensordict import TensorDict
 
 import wandb
@@ -44,73 +44,10 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
-#### Arguments ####
-#
-# description:
-#   The class's arguments you may change such as:
-#   cuda, wandb_track, wandb_entity.
-####
 
-
-@dataclass
-class Args:
-    name: str = "sac"
-    """the name of this experiment"""
-    weight: float = 0.8
-    """weight for the reduction of tumor"""
-    reward_type: str = "dummy_linear"
-    """type of the reward"""
-    seed: int = 1
-    """seed of the experiment"""
-    torch_deterministic: bool = True
-    """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
-    """if toggled, cuda will be enabled by default"""
-
-    # Weights and Biases specific arguments
-    wandb_track: bool = True
-    """track with wandb"""
-    wandb_entity: str = "corporate-manu-sureli"
-    """the wandb's entity name"""
-    wandb_project_name: str = "SAC_IMAGE_TIB"
-    """the wandb's project name"""
-
-    # Algorithm specific arguments
-    env_id: str = "physigym/ModelPhysiCellEnv-v0"
-    """the id of the environment"""
-    observation_type: str = "multi_channels"
-    """the type of observation"""
-    total_timesteps: int = int(1e6)
-    """the learning rate of the optimizer"""
-    buffer_size: int = int(1e6)
-    """the replay memory buffer size"""
-    gamma: float = 0.99
-    """the discount factor gamma"""
-    tau: float = 0.005
-    """target smoothing coefficient (default: 0.005)"""
-    batch_size: int = 256
-    """the batch size of sample from the reply memory"""
-    learning_starts: float = 10e3
-    """timestep to start learning"""
-    policy_lr: float = 3e-4
-    """the learning rate of the policy network optimizer"""
-    q_lr: float = 3e-4
-    """the learning rate of the Q network network optimizer"""
-    policy_frequency: int = 2
-    """the frequency of training policy (delayed)"""
-    target_network_frequency: int = 1  # Denis Yarats' implementation delays this by 2.
-    """the frequency of updates for the target nerworks"""
-    alpha: float = 0.2
-    """Entropy regularization coefficient."""
-    autotune: bool = True
-    """automatic tuning of the entropy coefficient"""
-
-
-#### Wrapper ####
-#
-# description:
-#   PhysiCell Gymnasium environment wrapper.
-#####
+################################
+# Class PhysiCellModel Wrapper #
+################################
 
 
 class PhysiCellModelWrapper(gym.Wrapper):
@@ -138,7 +75,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
                 )
 
         self.list_variable_name = list_variable_name
-
         low = np.array(
             [
                 env.action_space[variable_name].low[0]
@@ -154,7 +90,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self._action_space = Box(low=low, high=high, dtype=np.float64)
 
         self.weight = weight
-        self.reward_type = env.unwrapped.reward_type
 
     @property
     def action_space(self):
@@ -171,17 +106,18 @@ class PhysiCellModelWrapper(gym.Wrapper):
         Returns:
             Tuple: Observation, reward, terminated, truncated, info.
         """
+        # dictionnary action
         d_action = {
             variable_name: np.array([value])
             for variable_name, value in zip(self.list_variable_name, action)
         }
-        # Take a step in the environment
+        # take a step in the environment
         o_observation, r_cancer_cells, b_terminated, b_truncated, info = self.env.step(
             d_action
         )
 
         r_drugs = np.mean(action)
-        # Add information into the dictionnary info
+        # add information into the info dictionnary
         info["action"] = d_action
         info["reward_drugs"] = r_drugs
         info["reward_cancer_cells"] = r_cancer_cells
@@ -191,11 +127,9 @@ class PhysiCellModelWrapper(gym.Wrapper):
         return o_observation, r_reward, b_terminated, b_truncated, info
 
 
-#### Neural Networks ####
-#
-# description:
-#   A list of torch objects mainly Neural Networks (Actor/Critic).
-####
+#########################
+# Class Neural Networks #
+#########################
 
 
 class PixelPreprocess(nn.Module):
@@ -244,9 +178,8 @@ class ImpalaBlock(nn.Module):
 class FeatureExtractor(nn.Module):
     """Handles both image-based and vector-based state inputs dynamically."""
 
-    def __init__(self, env, cfg):
+    def __init__(self, env):
         super().__init__()
-        self.cfg = cfg
 
         obs_shape = env.observation_space.shape
         self.is_image = len(obs_shape) == 3  # Check if input is an image (C, H, W)
@@ -284,10 +217,9 @@ class FeatureExtractor(nn.Module):
 class QNetwork(nn.Module):
     """Critic network (Q-function)"""
 
-    def __init__(self, env, cfg):
+    def __init__(self, env):
         super().__init__()
-        self.cfg = cfg
-        self.feature_extractor = FeatureExtractor(env, cfg["cfg_FeatureExtractor"])
+        self.feature_extractor = FeatureExtractor(env)
 
         # Fully connected layers
         self.fc1 = nn.LazyLinear(256)
@@ -311,10 +243,9 @@ class Actor(nn.Module):
     LOG_STD_MAX = 2
     LOG_STD_MIN = -5
 
-    def __init__(self, env, cfg):
+    def __init__(self, env):
         super().__init__()
-        self.cfg = cfg
-        self.feature_extractor = FeatureExtractor(env, cfg["cfg_FeatureExtractor"])
+        self.feature_extractor = FeatureExtractor(env)
         action_dim = np.prod(env.action_space.shape)
 
         # Fully connected layers
@@ -488,263 +419,477 @@ class ReplayBuffer(object):
 ####
 
 
-def main():
-    args = tyro.cli(Args)
-    # INITIALISATION/ CREATE FOLDERS
-    config = vars(args)
-    custom_run_name = f"{args.name}: seed_{args.seed}_observationtype_{args.observation_type}_weight_{args.weight}_rewardtype_{args.reward_type}_time_{int(time.time())}"
-    if args.wandb_track:
-        run = wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            name=custom_run_name,
-            sync_tensorboard=True,
-            config=config,
-            monitor_gym=True,
-            save_code=True,
-        )
-        wandb_base_dir = run.dir  # e.g. wandb/run-20250612_123456-abcdef
+def run(
+    s_settingxml="config/PhysiCell_settings.xml",
+    r_max_time_episode=10000.0,  # xpath
+    i_thread=8,  # xpath
+    i_seed=int(1),
+    s_observation_mode="scalars",
+    s_render_mode=None,
+    s_name="sac",
+    b_wandb=True,
+    i_total_step_learn=int(4e5),
+):
+    d_arg_run = {
+        # basics
+        "name": s_name,  # str: the name of this experiment
+        # hardware
+        "cuda": True,  # bool: should torch check for gpu (nvidia, amd mroc) accelerator?
+        # tracking
+        "wandb_track": b_wandb,  # bool: track with wandb, if false locallt tensorboard
+        # random seed
+        "seed": i_seed,  # int or none: seed of the experiment
+        # steps
+        "total_timesteps": i_total_step_learn,  # int: the total number of steps
+    }
+    # wandb
+    d_arg_wandb = {
+        "entity": "corporate-manu-sureli",  # str: the wandb s entity name
+        "project": "SAC_IMAGE_TIB",  # str: the wandb s project name
+        "sync_tensorboard": True,
+        "monitor_gym": True,
+        "save_code": True,
+    }
 
-        # Create a subfolder using your meaningful name
-        run_dir = os.path.join(wandb_base_dir, custom_run_name)
-        os.makedirs(run_dir, exist_ok=True)
-        print("Wandb selected")
+    # physigym
+    d_arg_physigym_model = {
+        "id": "physigym/ModelPhysiCellEnv-v0",  # str: the id of the gymnasium environmenit
+        "settingxml": s_settingxml,
+        "cell_type_cmap": {
+            "tumor": "yellow",
+            "cell_1": "green",
+            "cell_2": "navy",
+        },  # viridis
+        "figsize": (6, 6),
+        "observation_mode": s_observation_mode,  # str: scalars , img_rgb , img_mc
+        "render_mode": s_render_mode,  # human, rgb_array
+        "verbose": True,
+        "img_rgb_grid_size_x": 64,  # pixel size
+        "img_rgb_grid_size_y": 64,  # pixel size
+        "img_mc_grid_size_x": 64,  # pixel size
+        "img_mc_grid_size_y": 64,  # pixel size
+        "normalization_factor": 512,  # normalization factor
+    }
+    d_arg_physigym_wrapper = {
+        "list_variable_name": ["drug_1"],  # list of str: of action varaible names
+        "weight": 0.5,  # float: weight for the reduction of tumor
+    }
+
+    # rl algorithm
+    d_arg_rl = {
+        # algoritm neural network I
+        "buffer_size": int(3e5),  # int: the replay memory buffer size
+        "batch_size": 64,  # int: the batch size of sample from the reply memory
+        "learning_starts": 10e3,  # float: timestep to start learning
+        "policy_frequency": 2,  # int: the frequency of training policy (delayed)
+        "target_network_frequency": 1,  # int: the frequency of updates for the target nerworks (Denis Yarats" implementation delays this by 2.)
+        # algorithm neural network II
+        "autotune": True,  # bool: automatic tuning the the entropy coefficient.
+        "alpha": 0.05,  # float: set manual entropy regularization coefficient.
+        "tau": 0.005,  # float: target smoothing coefficient (default" : 0.005)
+        "q_lr": 3e-4,  # float: the learning rate of the Q network network optimizer
+        "policy_lr": 3e-4,  # float: the learning rate of the policy network optimizer
+        # algorithm neural network III
+        "gamma": 0.99,  # float: the discount factor gamma (how much learning)
+    }
+
+    # all in one
+    d_arg = {}
+    d_arg.update(d_arg_run)
+    d_arg.update(d_arg_wandb)
+    d_arg.update(d_arg_physigym_model)
+    d_arg.update(d_arg_physigym_wrapper)
+    d_arg.update(d_arg_rl)
+
+    # initialize tracking
+    s_run = f"{d_arg['name']}_seed_{d_arg['seed']}_observationtype_{d_arg['observation_mode']}_weight_{d_arg['weight']}_time_{int(time.time())}"
+    if d_arg["wandb_track"]:
+        print("tracking: wandb ...")
+        run = wandb.init(name=s_run, config=d_arg, **d_arg_wandb)
+        s_dir_run = os.path.join(
+            run.dir, s_run
+        )  # run.dir wandb/run-20250612_123456-abcdef
     else:
-        run_dir = os.path.join("tensorboard", custom_run_name)
-        print("Tensorboard selected")
-    data_folder = os.path.join(run_dir, "data")
-    os.makedirs(data_folder, exist_ok=True)
-    # Organize output folders using run_dir
-    # os.makedirs(os.path.join(run_dir, "image"), exist_ok=True)
-    # os.makedirs(os.path.join(run_dir, "models"), exist_ok=True)
-    writer = SummaryWriter(run_dir)
+        print("tracking tensorboard ...")
+        s_dir_run = os.path.join("tensorboard", s_run)
+    s_dir_data = os.path.join(s_dir_run, "data")
+
+    # initialize tensorbord recording
+    writer = tensorboard.SummaryWriter(s_dir_run)
     writer.add_text(
         "hyperparameters",
         "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in config.items()])),
+        % (
+            "\n".join(
+                [f"|{s_key}|{s_value}|" for s_key, s_value in sorted(d_arg.items())]
+            )
+        ),
     )
 
-    # SEEDING
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
+    # initialize csv recording
+    ld_data = []
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    # initialisation of the environment
-    env = gym.make(
-        args.env_id,
-        observation_type=args.observation_type,
-        reward_type=args.reward_type,
+    # set random seed
+    print("SEEEED")
+    print(d_arg["seed"])
+    random.seed(d_arg["seed"])
+    np.random.seed(d_arg["seed"])
+    if d_arg["seed"] is None:
+        torch.seed()
+        torch.backends.cudnn.deterministic = False
+    else:
+        torch.manual_seed(d_arg["seed"])
+        torch.backends.cudnn.deterministic = True
+
+    # initialize physigym environment
+    env = gym.make(**d_arg_physigym_model)
+    env = PhysiCellModelWrapper(env=env, **d_arg_physigym_wrapper)
+    # manipulate setting xml
+    env.get_wrapper_attr("x_root").xpath("//overall/max_time")[0].text = str(
+        r_max_time_episode
+    )
+    env.get_wrapper_attr("x_root").xpath("//parallel/omp_num_threads")[0].text = str(
+        i_thread
     )
 
-    # Wrapper
-    env = PhysiCellModelWrapper(env=env, weight=args.weight)
-    cfg = {"cfg_FeatureExtractor": {}}
-    # Neural Networks/ Optimisers init.
-    actor = Actor(env, cfg).to(device)
-    qf1 = QNetwork(env, cfg).to(device)
-    qf2 = QNetwork(env, cfg).to(device)
-    qf1_target = QNetwork(env, cfg).to(device)
-    qf2_target = QNetwork(env, cfg).to(device)
-    target_actor = Actor(env, cfg).to(device)
-    target_actor.load_state_dict(actor.state_dict())
+    # initialize neural networks
+    o_device = torch.device(
+        "cuda" if torch.cuda.is_available() and d_arg["cuda"] else "cpu"
+    )  # cpu or gpu
+    actor = Actor(env).to(o_device)
+    qf1 = QNetwork(env).to(o_device)
+    qf2 = QNetwork(env).to(o_device)
+    qf1_target = QNetwork(env).to(o_device)
+    qf2_target = QNetwork(env).to(o_device)
     qf1_target.load_state_dict(qf1.state_dict())
     qf2_target.load_state_dict(qf2.state_dict())
     q_optimizer = optim.Adam(
-        list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr
+        list(qf1.parameters()) + list(qf2.parameters()), lr=d_arg["q_lr"]
     )
-    actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
-    # Automatic entropy tuning
-    if args.autotune:
+    actor_optimizer = optim.Adam(list(actor.parameters()), lr=d_arg["policy_lr"])
+    # set neural network entropy alpha by automatic tuning or manual
+    if d_arg["autotune"]:
         target_entropy = -torch.prod(
-            torch.Tensor(env.action_space.shape).to(device)
+            torch.Tensor(env.action_space.shape).to(o_device)
         ).item()
-        log_alpha = torch.zeros(1, requires_grad=True, device=device)
+        log_alpha = torch.zeros(1, requires_grad=True, device=o_device)
         alpha = log_alpha.exp().item()
-        a_optimizer = optim.Adam([log_alpha], lr=args.q_lr)
+        a_optimizer = optim.Adam([log_alpha], lr=d_arg["q_lr"])
     else:
-        alpha = args.alpha
+        alpha = d_arg["alpha"]
 
+    # initilize the reply buffer
     rb = ReplayBuffer(
         state_dim=env.observation_space.shape,
         action_dim=env.action_space.shape,
-        device=device,
-        buffer_size=args.buffer_size,
-        batch_size=args.batch_size,
+        device=o_device,
+        buffer_size=d_arg["buffer_size"],
+        batch_size=d_arg["batch_size"],
         state_type=env.observation_space.dtype,
     )
 
-    # Start the env and init, tracking values
-    obs, info = env.reset(seed=args.seed)
-    cumulative_return = 0
-    discounted_cumulative_return = 0
-    list_data = []
-    for global_step in range(args.total_timesteps):
-        # ALGO LOGIC: put action logic here
-        if global_step <= args.learning_starts:
-            actions = np.array(env.action_space.sample(), dtype=np.float16)
-        else:
-            x = obs
-            x = torch.Tensor(x).to(device).unsqueeze(0)
-            actions, _, _ = actor.get_action(x)
-            actions = actions.detach().squeeze(0).cpu().numpy()
-        # execute a step forward and log data.
-        next_obs, rewards, terminations, truncations, info = env.step(actions)
-        done = terminations or truncations
-        cumulative_return += rewards
-        step_episode = env.unwrapped.step_episode
-        discounted_cumulative_return += rewards * args.gamma ** (step_episode)
-        rb.add(obs, actions, rewards, next_obs, done)
-        obs = next_obs.copy()
+    while env.unwrapped.step_env < d_arg["total_timesteps"]:
+        # manipulate setting xml before reset
+        # bue can be used for track or not track stuff, e.g. every 1024 episode
+        # env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"output/episode{str(i_episode).zfill(8)}"
 
-        step_data = {
-            "step": step_episode,
-            "rewards": rewards,
-            "cumulative_return": cumulative_return,
-            "discounted_cumulative_return": discounted_cumulative_return,
-            "drug_1": actions[0],
-            "number_cancer_cells": info["number_cancer_cells"],
-            "number_cell_1": info["number_cell_1"],
-            "number_cell_2": info["number_cell_2"],
-        }
-        list_data.append(step_data)
+        # reset gymnasium env
+        r_cumulative_return = 0
+        r_discounted_cumulative_return = 0
+        o_observation, d_info = env.reset(seed=d_arg["seed"])
 
-        if global_step == args.batch_size:
-            data = rb.sample()
-            data_next_state = data["next_state"]
-            data_state = data["state"]
-            with torch.no_grad():
-                next_state_actions, _, _ = actor.get_action(data_next_state)
-                _, _ = (
-                    qf1(data_next_state, next_state_actions),
-                    qf2(data_next_state, next_state_actions),
-                )
-                _, _ = (
-                    qf1_target(data_next_state, next_state_actions),
-                    qf2_target(data_next_state, next_state_actions),
-                )
-            del next_state_actions, data_next_state, data_state, data
+        # time step loop
+        b_episode_over = False
+        while not b_episode_over:
+            # sample the action space or learn
+            if env.unwrapped.step_env <= d_arg["learning_starts"]:
+                a_action = np.array(env.action_space.sample(), dtype=np.float16)
+            else:
+                x = torch.Tensor(o_observation).to(o_device).unsqueeze(0)
+                actions, _, _ = actor.get_action(x)
+                a_action = actions.detach().squeeze(0).cpu().numpy()
 
-        # ALGO LOGIC: training.
-        if global_step > args.learning_starts:
-            data = rb.sample()
-            data_next_state = data["next_state"]
-            data_state = data["state"]
+            # physigym step
+            o_observation_next, r_reward, b_terminated, b_truncated, d_info = env.step(
+                a_action
+            )
+            r_cumulative_return += r_reward
+            r_discounted_cumulative_return += r_reward * d_arg["gamma"] ** (
+                env.unwrapped.step_episode
+            )
+            b_episode_over = b_terminated or b_truncated
 
-            with torch.no_grad():
-                next_state_actions, next_state_log_pi, _ = actor.get_action(
-                    data_next_state
-                )
-                qf1_next_target = qf1_target(data_next_state, next_state_actions)
-                qf2_next_target = qf2_target(data_next_state, next_state_actions)
-                min_qf_next_target = (
-                    torch.min(qf1_next_target, qf2_next_target)
-                    - alpha * next_state_log_pi
-                )
-                next_q_value = data["reward"].flatten() + (
-                    1 - data["done"].flatten()
-                ) * args.gamma * (min_qf_next_target).view(-1)
+            # record to replay buffer
+            rb.add(
+                state=o_observation,
+                action=a_action,
+                next_state=o_observation_next,
+                reward=r_reward,
+                done=b_episode_over,
+            )
 
-            qf1_a_values = qf1(data_state, data["action"]).view(-1)
-            qf2_a_values = qf2(data_state, data["action"]).view(-1)
-            qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
-            qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
-            qf_loss = qf1_loss + qf2_loss
+            # for debuging the replay buffer
+            if env.unwrapped.step_env == d_arg["batch_size"] * (1.05):
+                data = rb.sample()
+                with torch.no_grad():
+                    next_state_actions, _, _ = actor.get_action(data["next_state"])
+                    qf1(data["next_state"], next_state_actions)
+                    qf2(data["next_state"], next_state_actions)
+                    qf1_target(data["next_state"], next_state_actions)
+                    qf2_target(data["next_state"], next_state_actions)
+                del data, next_state_actions
 
-            # optimize the model
-            q_optimizer.zero_grad()
-            qf_loss.backward()
-            q_optimizer.step()
-
-            if global_step % args.policy_frequency == 0:  # TD 3 Delayed update support
-                for _ in range(
-                    args.policy_frequency
-                ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
-                    pi, log_pi, _ = actor.get_action(data_state)
-
-                    qf1_pi = qf1(data_state, pi)
-                    qf2_pi = qf2(data_state, pi)
-                    min_qf_pi = torch.min(qf1_pi, qf2_pi)
-                    actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
-
-                    actor_optimizer.zero_grad()
-                    actor_loss.backward()
-                    actor_optimizer.step()
-                    if args.autotune:
-                        with torch.no_grad():
-                            _, log_pi, _ = actor.get_action(data_state)
-
-                        alpha_loss = (
-                            -log_alpha.exp() * (log_pi + target_entropy)
-                        ).mean()
-
-                        a_optimizer.zero_grad()
-                        alpha_loss.backward()
-                        a_optimizer.step()
-
-                        alpha = log_alpha.exp().item()
-                    entropy = -log_pi.mean().item()
-
-                losses = {
-                    "losses/min_qf_next_target": min_qf_next_target.mean().item(),
-                    "losses/qf1_values": qf1_a_values.mean().item(),
-                    "losses/qf2_values": qf2_a_values.mean().item(),
-                    "losses/qf1_loss": qf1_loss.item(),
-                    "losses/qf2_loss": qf2_loss.item(),
-                    "losses/qf_loss": qf_loss.item() / 2.0,
-                    "losses/actor_loss": actor_loss.item(),
-                    "losses/entropy": entropy,
-                }
-
-                for tag, value in losses.items():
-                    writer.add_scalar(tag, value, global_step)
-
-            # Update the target networks
-            if global_step % args.target_network_frequency == 0:
-                for param, target_param in zip(
-                    qf1.parameters(), qf1_target.parameters()
-                ):
-                    target_param.data.copy_(
-                        args.tau * param.data + (1 - args.tau) * target_param.data
+            # learning
+            if env.unwrapped.step_env > d_arg["learning_starts"]:
+                data = rb.sample()
+                with torch.no_grad():
+                    next_state_actions, next_state_log_pi, _ = actor.get_action(
+                        data["next_state"]
                     )
-                for param, target_param in zip(
-                    qf2.parameters(), qf2_target.parameters()
-                ):
-                    target_param.data.copy_(
-                        args.tau * param.data + (1 - args.tau) * target_param.data
+                    qf1_next_target = qf1_target(data["next_state"], next_state_actions)
+                    qf2_next_target = qf2_target(data["next_state"], next_state_actions)
+                    min_qf_next_target = (
+                        torch.min(qf1_next_target, qf2_next_target)
+                        - alpha * next_state_log_pi
                     )
-        episode = env.unwrapped.episode
-        scalars = {
-            "env/drug_1": actions[0],
-            "env/reward_value": rewards,
-            "env/number_cancer_cells": info["number_cancer_cells"],
-            "env/number_cell_1": info["number_cell_1"],
-            "env/number_cell_2": info["number_cell_2"],
-            "env/reward_cancer_cells": info["reward_cancer_cells"],
-            "env/reward_drugs": info["reward_drugs"],
-        }
+                    next_q_value = data["reward"].flatten() + (
+                        1 - data["done"].flatten()
+                    ) * d_arg["gamma"] * (min_qf_next_target).view(-1)
 
-        for tag, value in scalars.items():
-            writer.add_scalar(tag, value, episode)
-        if done:
+                qf1_a_values = qf1(data["state"], data["action"]).view(-1)
+                qf2_a_values = qf2(data["state"], data["action"]).view(-1)
+                qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
+                qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+                qf_loss = qf1_loss + qf2_loss
+
+                # optimize the model
+                q_optimizer.zero_grad()
+                qf_loss.backward()
+                q_optimizer.step()
+
+                # update the target networks
+                if env.unwrapped.step_env % d_arg["target_network_frequency"] == 0:
+                    for param, target_param in zip(
+                        qf1.parameters(), qf1_target.parameters()
+                    ):
+                        target_param.data.copy_(
+                            d_arg["tau"] * param.data
+                            + (1 - d_arg["tau"]) * target_param.data
+                        )
+                    for param, target_param in zip(
+                        qf2.parameters(), qf2_target.parameters()
+                    ):
+                        target_param.data.copy_(
+                            d_arg["tau"] * param.data
+                            + (1 - d_arg["tau"]) * target_param.data
+                        )
+
+                # update the policy
+                if (
+                    env.unwrapped.step_env % d_arg["policy_frequency"] == 0
+                ):  # TD 3 Delayed update support
+                    # compensate for the delay by doing "actor_update_interval" instead of 1
+                    for _ in range(d_arg["policy_frequency"]):
+                        pi, log_pi, _ = actor.get_action(data["observation"])
+
+                        qf1_pi = qf1(data["state"], pi)
+                        qf2_pi = qf2(data["state"], pi)
+                        min_qf_pi = torch.min(qf1_pi, qf2_pi)
+                        actor_loss = ((alpha * log_pi) - min_qf_pi).mean()
+
+                        actor_optimizer.zero_grad()
+                        actor_loss.backward()
+                        actor_optimizer.step()
+
+                        # entropy autotune
+                        if d_arg["autotune"]:
+                            with torch.no_grad():
+                                _, log_pi, _ = actor.get_action(data["state"])
+
+                            alpha_loss = (
+                                -log_alpha.exp() * (log_pi + target_entropy)
+                            ).mean()
+
+                            a_optimizer.zero_grad()
+                            alpha_loss.backward()
+                            a_optimizer.step()
+
+                            alpha = log_alpha.exp().item()
+
+                    # record policy update to tensoboard
+                    losses = {
+                        "losses/min_qf_next_target": min_qf_next_target.mean().item(),
+                        "losses/qf1_values": qf1_a_values.mean().item(),
+                        "losses/qf2_values": qf2_a_values.mean().item(),
+                        "losses/qf1_loss": qf1_loss.item(),
+                        "losses/qf2_loss": qf2_loss.item(),
+                        "losses/qf_loss": qf_loss.item() / 2.0,
+                        "losses/actor_loss": actor_loss.item(),
+                    }
+
+                    if d_arg["wandb_track"]:
+                        run.log(losses)
+                    else:
+                        for tag, value in losses.items():
+                            writer.add_scalar(tag, value, env.unwrapped.step_episode)
+
+                    # record policy update to csv
+                    # pass
+
+            # handle observation
+            o_observation = o_observation_next
+
+            # recording step to tensorboard
             scalars = {
-                "charts/cumulative_return": cumulative_return,
-                "charts/episodic_length": step_episode,
-                "charts/discounted_cumulative_return": discounted_cumulative_return,
+                "env/drug_1": a_action[0],
+                "env/reward_value": r_reward,
+                "env/number_tumor": d_info["number_tumor"],
+                "env/number_cell_1": d_info["number_cell_1"],
+                "env/number_cell_2": d_info["number_cell_2"],
+                "env/reward_cancer_cells": d_info["reward_cancer_cells"],
+                "env/reward_drugs": d_info["reward_drugs"],
             }
+            if d_arg["wandb_track"]:
+                run.log(scalars)
+            else:
+                for tag, value in scalars.items():
+                    writer.add_scalar(tag, value, env.unwrapped.step_env)
+
+            # record step to csv
+            d_data = {
+                "step": env.unwrapped.step_episode,
+                "reward": r_reward,
+                "cumulative_return": r_cumulative_return,
+                "discounted_cumulative_return": r_discounted_cumulative_return,
+                "drug_1": a_action[0],
+                "number_tumor": d_info["number_tumor"],
+                "number_cell_1": d_info["number_cell_1"],
+                "number_cell_2": d_info["number_cell_2"],
+            }
+            ld_data.append(d_data)
+
+        # recording episode to tensorbord
+        scalars = {
+            "charts/cumulative_return": r_cumulative_return,
+            "charts/episodic_length": env.unwrapped.episode,
+            "charts/discounted_cumulative_return": r_discounted_cumulative_return,
+        }
+        if d_arg["wandb_track"]:
+            run.log(scalars)
+        else:
             for tag, value in scalars.items():
-                writer.add_scalar(tag, value, episode)
-            df = pd.DataFrame(list_data)
-            df.to_csv(data_folder + f"/{episode}/data.csv", index=False)
-            list_data = []
-            discounted_cumulative_return = 0
-            cumulative_return = 0
-            obs, info = env.reset()
-            done = False
+                writer.add_scalar(tag, value, env.unwrapped.step_env)
+
+        # recording episode to csv
+        df = pd.DataFrame(ld_data)
+        s_dir_data_episode = os.path.join(s_dir_data, str(env.unwrapped.episode))
+        os.makedirs(s_dir_data_episode, exist_ok=True)
+        df.to_csv(os.path.join(s_dir_data_episode, "data.csv"), index=False)
+        ld_data = []
+
+    # finish
     env.close()
     writer.close()
 
 
+########
+# Main #
+########
+
 if __name__ == "__main__":
-    main()
+    print("run physigym learing ...")
+
+    # argv
+    parser = argparse.ArgumentParser(
+        prog="run physigym episodes",
+        description="script to run physigym episodes.",
+    )
+    # settingxml file
+    parser.add_argument(
+        "settingxml",
+        # type = str,
+        nargs="?",
+        default="config/PhysiCell_settings.xml",
+        help="path/to/settings.xml file.",
+    )
+    # max_time
+    parser.add_argument(
+        "--max_time_episode",
+        type=float,
+        nargs="?",
+        default=10000.0,
+        help="set overall max_time in min in the settings.xml file.",
+    )
+    # thread
+    parser.add_argument(
+        "--thread",
+        type=int,
+        nargs="?",
+        default=8,
+        help="set parallel omp_num_threads in the settings.xml file.",
+    )
+    # seed
+    parser.add_argument(
+        "--seed",
+        type=int,
+        nargs="?",
+        default=1,
+        help="set options random_seed in the settings.xml file and python.",
+    )
+    # observation_mode
+    parser.add_argument(
+        "--observation_mode",
+        # type = str,
+        nargs="?",
+        default="img_mc",
+        help="observation mode scalars, img_rgb, or img_mc.",
+    )
+    # render_mode
+    parser.add_argument(
+        "--render_mode",
+        # type = str,
+        nargs="?",
+        default="none",
+        help="render mode None, rgb_array, or human. observation mode scalars needs either render mode rgb_array or human.",
+    )
+    # name
+    parser.add_argument(
+        "--name",
+        # type = str,
+        nargs="?",
+        default="sac",
+        help="experiment name.",
+    )
+    # wandb tracking
+    parser.add_argument(
+        "--wandb",
+        # type = bool,
+        nargs="?",
+        default="false",
+        help="tracking online with wandb? false with track locally with tensorboard.",
+    )
+    # total timesteps
+    parser.add_argument(
+        "--total_step_learn",
+        type=int,
+        nargs="?",
+        default=int(3e5),
+        help="set total time steps for the learing process to take.",
+    )
+
+    # parse arguments
+    args = parser.parse_args()
+    print(args)
+
+    # processing
+    run(
+        s_settingxml=args.settingxml,
+        r_max_time_episode=float(args.max_time_episode),
+        i_thread=args.thread,
+        i_seed=1,
+        s_observation_mode=args.observation_mode,
+        s_render_mode=None if args.render_mode.lower() == "none" else args.render_mode,
+        s_name=args.name,
+        b_wandb=True if args.wandb.lower() == "true" else False,
+        i_total_step_learn=int(args.total_step_learn),
+    )

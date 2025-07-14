@@ -500,8 +500,8 @@ mcdsts.plot_timeseries(focus_cat="cell_type", focus_num="apoptosis_rate", frame=
 mcdsts.plot_timeseries(focus_num="drug", frame="conc_df", title="mean drug concentration over time", ext="jpeg")
 ```
 
-![Tutorial Model](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/model_tutorial.gif)
-![Tutorial Model Time Series](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/model_tutorial_timeseries.jpeg)
+![Tutorial Model](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/tutorial/model_tutorial.gif)
+![Tutorial Model Time Series](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/tutorial/model_tutorial_timeseries.jpeg)
 
 
 ## The [episode](https://github.com/Dante-Berth/PhysiGym/tree/main/model/episode) model.
@@ -601,4 +601,4 @@ while not b_episode_over:
 env.close()
 ```
 
-![Episode Model](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/model_episode.gif)
+![Episode Model](https://github.com/Dante-Berth/PhysiGym/blob/main/man/img/tutorial/model_episode.gif)

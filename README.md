@@ -7,7 +7,7 @@ git tag -a v0.0.0 -m'version 0.0.0'
 git push --tag
 -->
 
-![physigym logo & title](man/img/physigym_title_v0.0.0.png)
+![physigym logo & title](man/img/logo/physigym_title_v0.0.0.png)
 
 
 # Header:
@@ -97,7 +97,7 @@ To be BibTeX.
 
 # Release Notes:
 
-+ 1.0.0 (2025-07-14): first public release.
++ 1.0.0 (2025-07-14): public beta release.
 + 0.4.1 (2025-06-21): bue ok release.
 + 0.4.0 (2025-02-28): models, rl, os portability, unit tests, and documentation complete.
 + 0.3.1 (2025-02-05): custom\_modules/embedding to custom\_module/extending change.
