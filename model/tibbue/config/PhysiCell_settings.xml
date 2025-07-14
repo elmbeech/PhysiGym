@@ -10,15 +10,15 @@
     </cell_rules>
 
     <domain>
-        <x_min>-256</x_min>
-        <x_max>256</x_max>
-        <y_min>-256</y_min>
-        <y_max>256</y_max>
-        <z_min>-10</z_min>
-        <z_max>10</z_max>
-        <dx>20</dx>
-        <dy>20</dy>
-        <dz>20</dz>
+        <x_min>-512</x_min>
+        <x_max>512</x_max>
+        <y_min>-512</y_min>
+        <y_max>512</y_max>
+        <z_min>-8</z_min>
+        <z_max>8</z_max>
+        <dx>16</dx>
+        <dy>16</dy>
+        <dz>16</dz>
         <use_2D>true</use_2D>
     </domain>
 
@@ -65,66 +65,66 @@
     <microenvironment_setup>
         <variable name="debris" units="dimensionless" ID="0">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">1</diffusion_coefficient>
-                <decay_rate units="1/min">0</decay_rate>
+                <diffusion_coefficient units="micron^2/min">70.0</diffusion_coefficient>
+                <decay_rate units="1/min">0.0</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False" />
-                <boundary_value ID="xmax" enabled="False" />
-                <boundary_value ID="ymin" enabled="False" />
-                <boundary_value ID="ymax" enabled="False" />
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="drug_1" units="dimensionless" ID="1">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">0</diffusion_coefficient>
-                <decay_rate units="1/min">0.01</decay_rate>
+                <diffusion_coefficient units="micron^2/min">5000.0</diffusion_coefficient>
+                <decay_rate units="1/min">0.0005</decay_rate>
             </physical_parameter_set>
-            <initial_condition units="dimensionless">0</initial_condition>
-            <Dirichlet_boundary_condition units="dimensionless" enabled="True">0</Dirichlet_boundary_condition>
+            <initial_condition units="dimensionless">0.0</initial_condition>
+            <Dirichlet_boundary_condition units="dimensionless" enabled="True">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="True">0</boundary_value>
-                <boundary_value ID="xmax" enabled="True">0</boundary_value>
-                <boundary_value ID="ymin" enabled="True">0</boundary_value>
-                <boundary_value ID="ymax" enabled="True">0</boundary_value>
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="True">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="True">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="True">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="True">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="anti-inflammatory factor" units="dimensionless" ID="2">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">1000.0</diffusion_coefficient>
-                <decay_rate units="1/min">0.05</decay_rate>
+                <diffusion_coefficient units="micron^2/min">5000.0</diffusion_coefficient>
+                <decay_rate units="1/min">0.0005</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False" />
-                <boundary_value ID="xmax" enabled="False" />
-                <boundary_value ID="ymin" enabled="False" />
-                <boundary_value ID="ymax" enabled="False" />
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="pro-inflammatory factor" units="dimensionless" ID="3">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">1000.0</diffusion_coefficient>
-                <decay_rate units="1/min">0.1</decay_rate>
+                <diffusion_coefficient units="micron^2/min">5000.0</diffusion_coefficient>
+                <decay_rate units="1/min">0.0005</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False" />
-                <boundary_value ID="xmax" enabled="False" />
-                <boundary_value ID="ymin" enabled="False" />
-                <boundary_value ID="ymax" enabled="False" />
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <options>
@@ -144,7 +144,7 @@
             <phenotype>
                 <cycle code="5" name="live">
                     <phase_transition_rates units="1/min">
-                        <rate start_index="0" end_index="0" fixed_duration="false">5e-5</rate>
+                        <rate start_index="0" end_index="0" fixed_duration="false">0.000694</rate>
                     </phase_transition_rates>
                     <standard_asymmetric_division enabled="False">
                         <asymmetric_division_probability name="tumor" units="dimensionless">1.0</asymmetric_division_probability>
@@ -154,31 +154,31 @@
                 </cycle>
                 <death>
                     <model code="100" name="apoptosis">
-                        <death_rate units="1/min">1e-6</death_rate>
+                        <death_rate units="1/min">5.31667e-05</death_rate>
                         <phase_durations units="min">
-                            <duration index="0" fixed_duration="true">516</duration>
+                            <duration index="0" fixed_duration="false">516</duration>
                         </phase_durations>
                         <parameters>
                             <unlysed_fluid_change_rate units="1/min">0.05</unlysed_fluid_change_rate>
-                            <lysed_fluid_change_rate units="1/min">0</lysed_fluid_change_rate>
+                            <lysed_fluid_change_rate units="1/min">0.0</lysed_fluid_change_rate>
                             <cytoplasmic_biomass_change_rate units="1/min">1.66667e-02</cytoplasmic_biomass_change_rate>
                             <nuclear_biomass_change_rate units="1/min">5.83333e-03</nuclear_biomass_change_rate>
-                            <calcification_rate units="1/min">0</calcification_rate>
+                            <calcification_rate units="1/min">0.0</calcification_rate>
                             <relative_rupture_volume units="dimensionless">2.0</relative_rupture_volume>
                         </parameters>
                     </model>
                     <model code="101" name="necrosis">
-                        <death_rate units="1/min">0</death_rate>
+                        <death_rate units="1/min">0.0</death_rate>
                         <phase_durations units="min">
-                            <duration index="0" fixed_duration="true">0</duration>
-                            <duration index="1" fixed_duration="true">86400</duration>
+                            <duration index="0" fixed_duration="false">1.11111e-10</duration>
+                            <duration index="1" fixed_duration="true">86399.80646</duration>
                         </phase_durations>
                         <parameters>
-                            <unlysed_fluid_change_rate units="1/min">0.05</unlysed_fluid_change_rate>
-                            <lysed_fluid_change_rate units="1/min">0</lysed_fluid_change_rate>
-                            <cytoplasmic_biomass_change_rate units="1/min">1.66667e-02</cytoplasmic_biomass_change_rate>
-                            <nuclear_biomass_change_rate units="1/min">5.83333e-03</nuclear_biomass_change_rate>
-                            <calcification_rate units="1/min">0</calcification_rate>
+                            <unlysed_fluid_change_rate units="1/min">1.11667e-02</unlysed_fluid_change_rate>
+                            <lysed_fluid_change_rate units="1/min">8.33333e-4</lysed_fluid_change_rate>
+                            <cytoplasmic_biomass_change_rate units="1/min">5.33333e-05</cytoplasmic_biomass_change_rate>
+                            <nuclear_biomass_change_rate units="1/min">2.16667e-4</nuclear_biomass_change_rate>
+                            <calcification_rate units="1/min">7e-05</calcification_rate>
                             <relative_rupture_volume units="dimensionless">2.0</relative_rupture_volume>
                         </parameters>
                     </model>
@@ -199,7 +199,7 @@
                     <cell_cell_repulsion_strength units="micron/min">10.0</cell_cell_repulsion_strength>
                     <relative_maximum_adhesion_distance units="dimensionless">1.25</relative_maximum_adhesion_distance>
                     <cell_adhesion_affinities>
-                        <cell_adhesion_affinity name="tumor">1</cell_adhesion_affinity>
+                        <cell_adhesion_affinity name="tumor">1.0</cell_adhesion_affinity>
                         <cell_adhesion_affinity name="cell_1">1.0</cell_adhesion_affinity>
                         <cell_adhesion_affinity name="cell_2">1.0</cell_adhesion_affinity>
                     </cell_adhesion_affinities>
@@ -264,30 +264,30 @@
                     </substrate>
                 </secretion>
                 <cell_interactions>
-                    <apoptotic_phagocytosis_rate units="1/min">0</apoptotic_phagocytosis_rate>
-                    <necrotic_phagocytosis_rate units="1/min">0</necrotic_phagocytosis_rate>
-                    <other_dead_phagocytosis_rate units="1/min">0</other_dead_phagocytosis_rate>
+                    <apoptotic_phagocytosis_rate units="1/min">0.0</apoptotic_phagocytosis_rate>
+                    <necrotic_phagocytosis_rate units="1/min">0.0</necrotic_phagocytosis_rate>
+                    <other_dead_phagocytosis_rate units="1/min">0.0</other_dead_phagocytosis_rate>
                     <live_phagocytosis_rates>
-                        <phagocytosis_rate name="tumor" units="1/min">0</phagocytosis_rate>
+                        <phagocytosis_rate name="tumor" units="1/min">0.0</phagocytosis_rate>
                         <phagocytosis_rate name="cell_1" units="1/min">0.0</phagocytosis_rate>
                         <phagocytosis_rate name="cell_2" units="1/min">0.0</phagocytosis_rate>
                     </live_phagocytosis_rates>
                     <attack_rates>
-                        <attack_rate name="tumor" units="1/min">0</attack_rate>
+                        <attack_rate name="tumor" units="1/min">0.0</attack_rate>
                         <attack_rate name="cell_1" units="1/min">0.0</attack_rate>
                         <attack_rate name="cell_2" units="1/min">0.0</attack_rate>
                     </attack_rates>
-                    <attack_damage_rate units="1/min">1</attack_damage_rate>
+                    <attack_damage_rate units="1/min">1.0</attack_damage_rate>
                     <attack_duration units="min">0.1</attack_duration>
                     <fusion_rates>
-                        <fusion_rate name="tumor" units="1/min">0</fusion_rate>
+                        <fusion_rate name="tumor" units="1/min">0.0</fusion_rate>
                         <fusion_rate name="cell_1" units="1/min">0.0</fusion_rate>
                         <fusion_rate name="cell_2" units="1/min">0.0</fusion_rate>
                     </fusion_rates>
                 </cell_interactions>
                 <cell_transformations>
                     <transformation_rates>
-                        <transformation_rate name="tumor" units="1/min">0</transformation_rate>
+                        <transformation_rate name="tumor" units="1/min">0.0</transformation_rate>
                         <transformation_rate name="cell_1" units="1/min">0.0</transformation_rate>
                         <transformation_rate name="cell_2" units="1/min">0.0</transformation_rate>
                     </transformation_rates>
@@ -298,8 +298,7 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <sample conserved="false" units="dimensionless" description="">1.0</sample>
-            </custom_data>
+          </custom_data>
             <initial_parameter_distributions enabled="false">
           </initial_parameter_distributions>
         </cell_definition>
@@ -307,7 +306,7 @@
             <phenotype>
                 <cycle code="5" name="live">
                     <phase_transition_rates units="1/min">
-                        <rate start_index="0" end_index="0" fixed_duration="false">0</rate>
+                        <rate start_index="0" end_index="0" fixed_duration="false">0.0</rate>
                     </phase_transition_rates>
                     <standard_asymmetric_division enabled="False">
                         <asymmetric_division_probability name="tumor" units="dimensionless">0</asymmetric_division_probability>
@@ -317,7 +316,7 @@
                 </cycle>
                 <death>
                     <model code="100" name="apoptosis">
-                        <death_rate units="1/min">0</death_rate>
+                        <death_rate units="1/min">0.0</death_rate>
                         <phase_transition_rates units="1/min">
                             <rate start_index="0" end_index="1" fixed_duration="false">0.001938</rate>
                         </phase_transition_rates>
@@ -358,7 +357,7 @@
                     <relative_rupture_volume units="dimensionless">2</relative_rupture_volume>
                 </volume>
                 <mechanics>
-                    <cell_cell_adhesion_strength units="micron/min">0</cell_cell_adhesion_strength>
+                    <cell_cell_adhesion_strength units="micron/min">0.4</cell_cell_adhesion_strength>
                     <cell_cell_repulsion_strength units="micron/min">10.0</cell_cell_repulsion_strength>
                     <relative_maximum_adhesion_distance units="dimensionless">1.25</relative_maximum_adhesion_distance>
                     <cell_adhesion_affinities>
@@ -377,7 +376,7 @@
                 </mechanics>
                 <motility>
                     <speed units="micron/min">0.5</speed>
-                    <persistence_time units="min">100</persistence_time>
+                    <persistence_time units="min">5.0</persistence_time>
                     <migration_bias units="dimensionless">0.75</migration_bias>
                     <options>
                         <enabled>true</enabled>
@@ -427,8 +426,8 @@
                     </substrate>
                 </secretion>
                 <cell_interactions>
-                    <apoptotic_phagocytosis_rate units="1/min">0</apoptotic_phagocytosis_rate>
-                    <necrotic_phagocytosis_rate units="1/min">0</necrotic_phagocytosis_rate>
+                    <apoptotic_phagocytosis_rate units="1/min">0.0</apoptotic_phagocytosis_rate>
+                    <necrotic_phagocytosis_rate units="1/min">0.0</necrotic_phagocytosis_rate>
                     <other_dead_phagocytosis_rate units="1/min">0.0</other_dead_phagocytosis_rate>
                     <live_phagocytosis_rates>
                         <phagocytosis_rate name="tumor" units="1/min">0.0</phagocytosis_rate>
@@ -461,17 +460,16 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <sample conserved="false" units="dimensionless" description="">0.0</sample>
-            </custom_data>
+          </custom_data>
             <initial_parameter_distributions enabled="false">
           </initial_parameter_distributions>
         </cell_definition>
         <cell_definition name="cell_2" ID="2">
             <phenotype>
                 <cycle code="5" name="live">
-                    <phase_transition_rates units="1/min">
-                        <rate start_index="0" end_index="0" fixed_duration="false">72e-7</rate>
-                    </phase_transition_rates>
+                    <phase_durations units="min">
+                        <duration index="0" fixed_duration="false">7200.0</duration>
+                    </phase_durations>
                     <standard_asymmetric_division enabled="True">
                         <asymmetric_division_probability name="tumor" units="dimensionless">0</asymmetric_division_probability>
                         <asymmetric_division_probability name="cell_1" units="dimensionless">0.2</asymmetric_division_probability>
@@ -480,7 +478,7 @@
                 </cycle>
                 <death>
                     <model code="100" name="apoptosis">
-                        <death_rate units="1/min">0</death_rate>
+                        <death_rate units="1/min">0.0</death_rate>
                         <phase_transition_rates units="1/min">
                             <rate start_index="0" end_index="1" fixed_duration="false">0.001938</rate>
                         </phase_transition_rates>
@@ -521,7 +519,7 @@
                     <relative_rupture_volume units="dimensionless">2</relative_rupture_volume>
                 </volume>
                 <mechanics>
-                    <cell_cell_adhesion_strength units="micron/min">0</cell_cell_adhesion_strength>
+                    <cell_cell_adhesion_strength units="micron/min">0.4</cell_cell_adhesion_strength>
                     <cell_cell_repulsion_strength units="micron/min">10.0</cell_cell_repulsion_strength>
                     <relative_maximum_adhesion_distance units="dimensionless">1.25</relative_maximum_adhesion_distance>
                     <cell_adhesion_affinities>
@@ -540,7 +538,7 @@
                 </mechanics>
                 <motility>
                     <speed units="micron/min">0.5</speed>
-                    <persistence_time units="min">100</persistence_time>
+                    <persistence_time units="min">5.0</persistence_time>
                     <migration_bias units="dimensionless">0.75</migration_bias>
                     <options>
                         <enabled>true</enabled>
@@ -554,7 +552,7 @@
                             <enabled>false</enabled>
                             <normalize_each_gradient>false</normalize_each_gradient>
                             <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="debris">0.2</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="drug_1">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="anti-inflammatory factor">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="pro-inflammatory factor">0.0</chemotactic_sensitivity>
@@ -577,9 +575,9 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="anti-inflammatory factor">
-                        <secretion_rate units="1/min">0</secretion_rate>
+                        <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">0</uptake_rate>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="pro-inflammatory factor">
@@ -590,9 +588,9 @@
                     </substrate>
                 </secretion>
                 <cell_interactions>
-                    <apoptotic_phagocytosis_rate units="1/min">0</apoptotic_phagocytosis_rate>
-                    <necrotic_phagocytosis_rate units="1/min">0</necrotic_phagocytosis_rate>
-                    <other_dead_phagocytosis_rate units="1/min">0</other_dead_phagocytosis_rate>
+                    <apoptotic_phagocytosis_rate units="1/min">0.0</apoptotic_phagocytosis_rate>
+                    <necrotic_phagocytosis_rate units="1/min">0.0</necrotic_phagocytosis_rate>
+                    <other_dead_phagocytosis_rate units="1/min">0.0</other_dead_phagocytosis_rate>
                     <live_phagocytosis_rates>
                         <phagocytosis_rate name="tumor" units="1/min">0.0</phagocytosis_rate>
                         <phagocytosis_rate name="cell_1" units="1/min">0.0</phagocytosis_rate>
@@ -624,8 +622,7 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <sample conserved="false" units="dimensionless" description="">0.0</sample>
-            </custom_data>
+          </custom_data>
             <initial_parameter_distributions enabled="false">
           </initial_parameter_distributions>
         </cell_definition>
@@ -640,9 +637,9 @@
 
     <user_parameters>
         <number_of_cells type="int" units="none" description="initial number of cells (for each cell type)">0</number_of_cells>
-        <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">60</dt_gym>
+        <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">480</dt_gym>
         <time type="double" units="min" description="necessary for PhysiGym, never delete!">0.0</time>
-        <drug_1 type="double" units="[0..1]" description="drug amount added right in the beginning of the time step">0</drug_1>
-        <r_growth type="double" units="1/min" description="netto growth rate tumor ">0.000049</r_growth>
+        <drug_1 type="double" units="[0..1)" description="drug amount added right in the beginning of the time step">0.0</drug_1>
+        <growth_rate type="double" units="1/min" description="netto growth rate tumor ">0.000641</growth_rate>
     </user_parameters>
 </PhysiCell_settings>

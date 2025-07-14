@@ -391,7 +391,7 @@ def run(
         "tau" : 0.005,    # float: target smoothing coefficient (default" : 0.005)
         "q_lr" : 3e-4,    # float: the learning rate of the Q network network optimizer
         "policy_lr" : 3e-4,    # float: the learning rate of the policy network optimizer
-        # algorithm neural network III
+        # algorithm neural network III: discounted cummulative reward calculation
         "gamma" : 0.99,    # float: the discount factor gamma (how much learning)
     }
 
@@ -428,7 +428,7 @@ def run(
     )
 
     # initialize csv recording
-    s_dir_pcoutput = "output/"
+    s_dir_pcoutput = "output"
     os.makedirs(s_dir_pcoutput, exist_ok=True)
 
     ls_columns = [
@@ -504,11 +504,11 @@ def run(
 
         # manipulate setting xml before reset to record full physicell run every 1024 episode.
         if env.unwrapped.episode % 1024 == 0:
-            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/episode{str(env.unwrapped.episode).zfill(8)}"
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = os.path.join(s_dir_pcoutput, f"episode{str(env.unwrapped.episode).zfill(8)}")
             env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[0].text = "true"
             env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = "false"
         else:
-            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"{s_dir_pcoutput}/devnull"
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = os.path.join(s_dir_pcoutput, "devnull")
             env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[0].text = "false"
             env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = "false"
 
