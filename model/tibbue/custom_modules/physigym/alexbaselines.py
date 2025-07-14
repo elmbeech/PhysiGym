@@ -43,6 +43,7 @@ class ReplayBuffer(object):
         - i_buffer_size (int): Maximum size of the replay buffer.
         - i_batch_size (int): Number of samples per batch.
         """
+        print(f"reply buffer: initialize with size {i_buffer_size} and batch size {i_batch_size} ...")
         self.o_device = o_device
         self.i_buffer_size = int(i_buffer_size)
         self.i_batch_size = int(i_batch_size)
@@ -81,6 +82,7 @@ class ReplayBuffer(object):
 
         self.buffer_index = (self.buffer_index + 1) % self.i_buffer_size
         self.full = self.full or self.buffer_index == 0
+        print(f"reply buffer add experiance at index:", self.buffer_index)
 
     def sample(self):
         """
@@ -90,10 +92,11 @@ class ReplayBuffer(object):
         - TensorDict containing sampled observations, actions, rewards, next observations, rewards, and episode_over flags.
         """
         # Ensure there are enough samples in the buffer
-        assert not (self.full or (self.buffer_index < self.i_batch_size)), "Buffer does not have enough samples"
+        assert self.full or not (self.buffer_index < self.i_batch_size), "Buffer does not have enough samples.\nEither the buffer is full {self.full} or index {self.buffer_index} < batch_size {self.i_batch_size}."
 
         # Generate random indices for sampling
         sample_index = np.random.randint(0, self.i_buffer_size if self.full else self.buffer_index, self.i_batch_size)
+        print(f"reply buffer sample {len(sample_index)} buffer experiances:", sorted(sample_index))
 
         # Convert indices to tensors and gather the sampled experiences
         oo_observation = torch.as_tensor(self.ao_observation[sample_index]).float()

@@ -321,7 +321,7 @@ class Actor(nn.Module):
 def run(
         s_settingxml="config/PhysiCell_settings.xml",
         r_max_time_episode=1440.0,  # xpath
-        i_thread=8,  # xpath
+        i_thread=16,  # xpath
         i_seed=None,
         s_observation_mode="scalars",
         s_render_mode=None,
@@ -380,14 +380,14 @@ def run(
     # rl algorithm
     d_arg_rl = {
         # algoritm neural network I
-        "buffer_size" : int(1e4),    # int: the replay memory buffer size
+        "buffer_size" : 2**13,  # int: the replay memory buffer size
         "batch_size" : 256,   # int: the batch size of sample from the reply memory
         "learning_starts" : 10e3,   # float: timestep to start learning
         "policy_frequency" : 2,    # int: the frequency of training policy (delayed)
         "target_network_frequency" : 1,   # int: the frequency of updates for the target nerworks (Denis Yarats" implementation delays this by 2.)
         # algorithm neural network II
-        "autotune" : True,   # bool: automatic tuning the the entropy coefficient.
-        "alpha" : 0.2,   # float: set manuall entropy regularization coefficient.
+        "autotune" : True,   # bool: automatic tuning the the entropy coefficient
+        "alpha" : 0.2,   # float: set manuall entropy regularization coefficient
         "tau" : 0.005,    # float: target smoothing coefficient (default" : 0.005)
         "q_lr" : 3e-4,    # float: the learning rate of the Q network network optimizer
         "policy_lr" : 3e-4,    # float: the learning rate of the policy network optimizer
@@ -438,11 +438,12 @@ def run(
         "terminated","truncated","over",
         "tumor","cell_1","cell_2",  # count
         "drug_added",
-        "drug_max","anti_inflammatory_factor_max","pro_inflammatory_max","debris_max"
-        "drug_median","anti_inflammatory_median","pro_inflammatory_median","debris_median"
-        "drug_mean","anti_inflammatory_mean","pro_inflammatory_mean","debris_mean"
-        "drug_std","anti_inflammatory_std","pro_inflammatory_std","debris_std"
-        "drug_min","anti_inflammatory_min","pro_inflammatory_min","debris_min"
+        "drug_max","anti_inflammatory_factor_max","pro_inflammatory_max","debris_max",
+        "drug_median","anti_inflammatory_median","pro_inflammatory_median","debris_median",
+        "drug_mean","anti_inflammatory_mean","pro_inflammatory_mean","debris_mean",
+        "drug_std","anti_inflammatory_std","pro_inflammatory_std","debris_std",
+        "drug_min","anti_inflammatory_min","pro_inflammatory_min","debris_min",
+        "\n"
     ]
     s_csv_record = os.path.join(s_dir_pcoutput, "record.csv")
     f = open(s_csv_record, "w")
@@ -655,6 +656,7 @@ def run(
                 str(se_subs_mean["drug_1"]), str(se_subs_mean["anti-inflammatory factor"]), str(se_subs_mean["pro-inflammatory factor"]), str(se_subs_mean["debris"]),
                 str(se_subs_std["drug_1"]), str(se_subs_std["anti-inflammatory factor"]), str(se_subs_std["pro-inflammatory factor"]), str(se_subs_std["debris"]),
                 str(se_subs_min["drug_1"]), str(se_subs_min["anti-inflammatory factor"]), str(se_subs_min["pro-inflammatory factor"]), str(se_subs_min["debris"]),
+                "\n",
             ]
             f = open(s_csv_record, "a")
             f.writelines(l_data)
@@ -699,7 +701,7 @@ if __name__ == "__main__":
         "--max_time_episode",
         type = float,
         nargs = "?",
-        default = 1440.0,
+        default = 11520.0,
         help = "set overall max_time in min in the settings.xml file."
     )
     # thread
@@ -707,7 +709,7 @@ if __name__ == "__main__":
         "--thread",
         type = int,
         nargs = "?",
-        default = 8,
+        default = 16,
         help = "set parallel omp_num_threads in the settings.xml file."
     )
     # seed
@@ -755,7 +757,7 @@ if __name__ == "__main__":
         "--total_step_learn",
         type = int,
         nargs = "?",
-        default = int(1e6),
+        default = int(1e5),
         help = "set total time steps for the learing process to take."
     )
 
