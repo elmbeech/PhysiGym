@@ -701,7 +701,7 @@ if __name__ == "__main__":
         "--max_time_episode",
         type = float,
         nargs = "?",
-        default = 11520.0,
+        default = 10080.0,
         help = "set overall max_time in min in the settings.xml file."
     )
     # thread
