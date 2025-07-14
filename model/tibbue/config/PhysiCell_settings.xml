@@ -23,7 +23,7 @@
     </domain>
 
     <overall>
-        <max_time units="min">11520.0</max_time>
+        <max_time units="min">10080.0</max_time>
         <time_units>min</time_units>
         <space_units>micron</space_units>
         <dt_diffusion units="min">0.01</dt_diffusion>
@@ -637,7 +637,7 @@
 
     <user_parameters>
         <number_of_cells type="int" units="none" description="initial number of cells (for each cell type)">0</number_of_cells>
-        <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">480</dt_gym>
+        <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">60</dt_gym>
         <time type="double" units="min" description="necessary for PhysiGym, never delete!">0.0</time>
         <drug_1 type="double" units="[0..1)" description="drug amount added right in the beginning of the time step">0.0</drug_1>
         <growth_rate type="double" units="1/min" description="netto growth rate tumor ">0.000641</growth_rate>
