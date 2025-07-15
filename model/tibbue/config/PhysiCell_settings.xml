@@ -81,7 +81,7 @@
         </variable>
         <variable name="drug_1" units="dimensionless" ID="1">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">5000.0</diffusion_coefficient>
+                <diffusion_coefficient units="micron^2/min">20000.0</diffusion_coefficient>
                 <decay_rate units="1/min">0.0005</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
@@ -170,8 +170,8 @@
                     <model code="101" name="necrosis">
                         <death_rate units="1/min">0.0</death_rate>
                         <phase_transition_rates units="1/min">
-                            <rate start_index="0" end_index="1" fixed_duration="false">9.e9</rate>
-                            <rate start_index="1" end_index="2" fixed_duration="true">0.000012</rate>
+                            <rate start_index="0" end_index="1" fixed_duration="false">9000000000.0</rate>
+                            <rate start_index="1" end_index="2" fixed_duration="true">1.2e-05</rate>
                         </phase_transition_rates>
                         <parameters>
                             <unlysed_fluid_change_rate units="1/min">1.11667e-02</unlysed_fluid_change_rate>
@@ -413,7 +413,7 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="anti-inflammatory factor">
-                        <secretion_rate units="1/min">10.0</secretion_rate>
+                        <secretion_rate units="1/min">1.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
@@ -571,7 +571,7 @@
                     <substrate name="drug_1">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <uptake_rate units="1/min">1.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="anti-inflammatory factor">
@@ -581,7 +581,7 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="pro-inflammatory factor">
-                        <secretion_rate units="1/min">10.0</secretion_rate>
+                        <secretion_rate units="1/min">1.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
