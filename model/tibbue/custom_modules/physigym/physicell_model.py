@@ -120,7 +120,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         # model dependent action_space processing logic goes here!
         d_action_space = spaces.Dict({
-            "drug_1": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float16),
+            "drug_1": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
         })
 
         # output
@@ -241,7 +241,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         # observe the environemnt
         if self.kwargs["observation_mode"] == "scalars":
-            a_norm_cell_count = np.zeros((self.cell_type_count,), dtype=float)
+            a_norm_cell_count = np.zeros((self.cell_type_count,), dtype=np.float32)
             for s_cell_type, i_id in self.cell_type_to_id.items():
                 a_norm_cell_count[i_id] = df_alive.loc[
                     (df_alive.type == s_cell_type),

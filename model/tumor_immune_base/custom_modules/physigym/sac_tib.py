@@ -424,7 +424,7 @@ def run(
     r_max_time_episode=10000.0,  # xpath
     i_thread=8,  # xpath
     i_seed=int(1),
-    s_observation_mode="scalars",
+    s_observation_mode="img_mc_substrates",
     s_render_mode=None,
     s_name="sac",
     b_wandb=True,
@@ -463,7 +463,7 @@ def run(
         "figsize": (6, 6),
         "observation_mode": s_observation_mode,  # str: scalars , img_rgb , img_mc
         "render_mode": s_render_mode,  # human, rgb_array
-        "verbose": True,
+        "verbose": False,
         "img_rgb_grid_size_x": 64,  # pixel size
         "img_rgb_grid_size_y": 64,  # pixel size
         "img_mc_grid_size_x": 64,  # pixel size
@@ -472,15 +472,15 @@ def run(
     }
     d_arg_physigym_wrapper = {
         "list_variable_name": ["drug_1"],  # list of str: of action varaible names
-        "weight": 0.5,  # float: weight for the reduction of tumor
+        "weight": 0.8,  # float: weight for the reduction of tumor
     }
 
     # rl algorithm
     d_arg_rl = {
         # algoritm neural network I
         "buffer_size": int(3e5),  # int: the replay memory buffer size
-        "batch_size": 64,  # int: the batch size of sample from the reply memory
-        "learning_starts": 10e3,  # float: timestep to start learning
+        "batch_size": 128,  # int: the batch size of sample from the replay memory
+        "learning_starts": 25e3,  # float: timestep to start learning
         "policy_frequency": 2,  # int: the frequency of training policy (delayed)
         "target_network_frequency": 1,  # int: the frequency of updates for the target nerworks (Denis Yarats" implementation delays this by 2.)
         # algorithm neural network II
@@ -530,8 +530,6 @@ def run(
     ld_data = []
 
     # set random seed
-    print("SEEEED")
-    print(d_arg["seed"])
     random.seed(d_arg["seed"])
     np.random.seed(d_arg["seed"])
     if d_arg["seed"] is None:
@@ -589,10 +587,30 @@ def run(
     )
 
     while env.unwrapped.step_env < d_arg["total_timesteps"]:
+        s_dir_data_episode = os.path.join(
+            s_dir_data, f"episode{str(env.unwrapped.episode).zfill(8)}"
+        )
+        os.makedirs(s_dir_data_episode, exist_ok=True)
         # manipulate setting xml before reset
         # bue can be used for track or not track stuff, e.g. every 1024 episode
         # env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text = f"output/episode{str(i_episode).zfill(8)}"
-
+        # manipulate setting xml before reset to record full physicell run every 1024 episode.
+        if env.unwrapped.episode % 100 == 0:
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[
+                0
+            ].text = s_dir_data_episode
+            env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[
+                0
+            ].text = "true"
+            env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = "true"
+        else:
+            env.get_wrapper_attr("x_root").xpath("//save/folder")[
+                0
+            ].text = os.path.join(s_dir_data, "devnull")
+            env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[
+                0
+            ].text = "false"
+            env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = "false"
         # reset gymnasium env
         r_cumulative_return = 0
         r_discounted_cumulative_return = 0
@@ -690,7 +708,7 @@ def run(
                 ):  # TD 3 Delayed update support
                     # compensate for the delay by doing "actor_update_interval" instead of 1
                     for _ in range(d_arg["policy_frequency"]):
-                        pi, log_pi, _ = actor.get_action(data["observation"])
+                        pi, log_pi, _ = actor.get_action(data["state"])
 
                         qf1_pi = qf1(data["state"], pi)
                         qf2_pi = qf2(data["state"], pi)
@@ -771,7 +789,7 @@ def run(
         # recording episode to tensorbord
         scalars = {
             "charts/cumulative_return": r_cumulative_return,
-            "charts/episodic_length": env.unwrapped.episode,
+            "charts/episodic_length": env.unwrapped.step_episode,
             "charts/discounted_cumulative_return": r_discounted_cumulative_return,
         }
         if d_arg["wandb_track"]:
@@ -782,8 +800,6 @@ def run(
 
         # recording episode to csv
         df = pd.DataFrame(ld_data)
-        s_dir_data_episode = os.path.join(s_dir_data, str(env.unwrapped.episode))
-        os.makedirs(s_dir_data_episode, exist_ok=True)
         df.to_csv(os.path.join(s_dir_data_episode, "data.csv"), index=False)
         ld_data = []
 
@@ -817,7 +833,7 @@ if __name__ == "__main__":
         "--max_time_episode",
         type=float,
         nargs="?",
-        default=10000.0,
+        default=11580.0,
         help="set overall max_time in min in the settings.xml file.",
     )
     # thread
@@ -842,7 +858,7 @@ if __name__ == "__main__":
         # type = str,
         nargs="?",
         default="img_mc",
-        help="observation mode scalars, img_rgb, or img_mc.",
+        help="observation mode scalars, img_rgb, img_mc or img_mc_substrates",
     )
     # render_mode
     parser.add_argument(
@@ -863,9 +879,9 @@ if __name__ == "__main__":
     # wandb tracking
     parser.add_argument(
         "--wandb",
-        # type = bool,
+        type=bool,
         nargs="?",
-        default="false",
+        default=True,
         help="tracking online with wandb? false with track locally with tensorboard.",
     )
     # total timesteps
@@ -873,7 +889,7 @@ if __name__ == "__main__":
         "--total_step_learn",
         type=int,
         nargs="?",
-        default=int(3e5),
+        default=int(2e5),
         help="set total time steps for the learing process to take.",
     )
 
@@ -886,10 +902,10 @@ if __name__ == "__main__":
         s_settingxml=args.settingxml,
         r_max_time_episode=float(args.max_time_episode),
         i_thread=args.thread,
-        i_seed=1,
+        i_seed=args.seed,
         s_observation_mode=args.observation_mode,
         s_render_mode=None if args.render_mode.lower() == "none" else args.render_mode,
         s_name=args.name,
-        b_wandb=True if args.wandb.lower() == "true" else False,
+        b_wandb=args.wandb,
         i_total_step_learn=int(args.total_step_learn),
     )

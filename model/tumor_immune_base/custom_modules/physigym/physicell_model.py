@@ -76,7 +76,12 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         img_mc_grid_size_y=64,  # pixel
         normalization_factor=512,
     ):
-        if observation_mode not in ["scalars", "img_rgb", "img_mc"]:
+        if observation_mode not in [
+            "scalars",
+            "img_rgb",
+            "img_mc",
+            "img_mc_substrates",
+        ]:
             raise ValueError(f"Error: unknown observation type: {observation_mode}")
         # check redner mode
         if observation_mode == "img_rgb" and render_mode == None:
@@ -168,20 +173,32 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 dtype=np.uint8,
             )
 
-        elif self.kwargs["observation_mode"] == "img_mc":
+        elif self.kwargs["observation_mode"] == "img_mc" or "img_mc_substrates":
             # Define the Box space for the multichannel image
             self.ratio_img_mc_size_y = self.height / self.kwargs["img_mc_grid_size_y"]
             self.ratio_img_mc_size_x = self.width / self.kwargs["img_mc_grid_size_x"]
-            o_observation_space = spaces.Box(
-                low=0,
-                high=255,
-                shape=(
-                    self.cell_type_count,
-                    self.kwargs["img_mc_grid_size_x"],
-                    self.kwargs["img_mc_grid_size_y"],
-                ),
-                dtype=np.uint8,
-            )
+            if self.kwargs["observation_mode"] == "img_mc":
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.cell_type_count,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
+            else:
+                o_observation_space = spaces.Box(
+                    low=0,
+                    high=255,
+                    shape=(
+                        self.cell_type_count + self.substrate_count,
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.uint8,
+                )
 
         else:
             raise ValueError(
@@ -257,7 +274,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             )
             o_observation = a_img
 
-        elif self.kwargs["observation_mode"] == "img_mc":
+        elif (
+            self.kwargs["observation_mode"] == "img_mc"
+            or self.kwargs["observation_mode"] == "img_mc_substrates"
+        ):
             # get cell_type indices
             cell_type_indices = df_alive["type"].map(self.cell_type_to_id).to_numpy()
 
@@ -289,11 +309,71 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             np.add.at(
                 image,
                 (cell_type_indices, x_bin, y_bin),
-                1 / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y),
+                1,
             )
 
             # output
-            o_observation = (image * 255).astype(np.uint8)
+            o_observation = (
+                (image * 255) / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
+            ).astype(np.uint8)
+
+            if self.kwargs["observation_mode"] == "img_mc_substrates":
+                self.df_subs = None
+                for s_subs in self.substrate_unique:
+                    df_subs = pd.DataFrame(
+                        physicell.get_microenv(s_subs), columns=["x", "y", "z", s_subs]
+                    )
+                    if self.df_subs is None:
+                        self.df_subs = df_subs
+                    else:
+                        self.df_subs = pd.merge(
+                            self.df_subs, df_subs, on=["x", "y", "z"]
+                        )
+                # discretize
+                self.df_subs["x_bin"] = (
+                    (
+                        (self.df_subs["x"] - self.x_min)
+                        / (self.x_max - self.x_min)
+                        * (self.kwargs["img_mc_grid_size_x"] - 1)
+                    )
+                    .astype(int)
+                    .clip(0, self.kwargs["img_mc_grid_size_x"] - 1)
+                )
+                self.df_subs["y_bin"] = (
+                    (
+                        (self.df_subs["y"] - self.y_min)
+                        / (self.y_max - self.y_min)
+                        * (self.kwargs["img_mc_grid_size_y"] - 1)
+                    )
+                    .astype(int)
+                    .clip(0, self.kwargs["img_mc_grid_size_y"] - 1)
+                )
+
+                grouped = self.df_subs.groupby(["x_bin", "y_bin"])[
+                    self.substrate_unique
+                ].max()
+
+                # initialize image
+                image = np.zeros(
+                    (
+                        len(self.substrate_unique),
+                        self.kwargs["img_mc_grid_size_x"],
+                        self.kwargs["img_mc_grid_size_y"],
+                    ),
+                    dtype=np.float32,
+                )
+
+                # fill image
+                for i, subs in enumerate(self.substrate_unique):
+                    for (x_bin, y_bin), value in grouped[subs].items():
+                        image[i, x_bin, y_bin] = value
+                min_vals = image.min(axis=(1, 2), keepdims=True)
+                max_vals = image.max(axis=(1, 2), keepdims=True)
+                scales = np.where((max_vals - min_vals) > 0, max_vals - min_vals, 1)
+                image = (image - min_vals) / scales
+                o_observation = np.concatenate(
+                    [o_observation, (image * 255).astype(np.uint8)]
+                )
 
         else:
             raise ValueError(
