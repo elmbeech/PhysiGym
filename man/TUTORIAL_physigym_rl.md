@@ -123,9 +123,9 @@ By adjusting $\alpha$, you can simulate different treatment strategies:
   - **Conservative**: $\alpha \approx 0$ → Minimize drug use, even if tumor persists.
   - **Perfect Balanced**: $\alpha = 0.5$ -> Perfect Trade-off between treatment effectiveness and side effects.
   - **Balanced**: $\alpha \in (0, 1)$ → Trade-off between treatment effectiveness and side effects.
-In this tutorial, we take $\alpha=0.5$.
+In this tutorial, we take $\alpha=0.8$.
 
-The first **state space** in this model is **multi_channels** a multi-channel image where each channel corresponds to a specific cell type. For one of the channels, we also reduce the dimensionality. For instance for a grid size of $64$ and for our three cell types we can represent the data by: [image cell types representation](img/multi_channels.png). We reduce the shape of the original size given by the **PhysiCell_settings.xml** file by discretizing the continuous environment into a uniform grid. We also compute $r_{x}=\lfloor \frac{width}{gridsize_{x}}\rfloor$ and $r_{y}=\lfloor\frac{height}{gridsize_{y}}\rfloor$. In our environment, $r_{x}=r_{y}$ because $width = height$ and $gridsize_{x}=gridsize_{y}=gridsize=64$
+The first **state space** in this model is **img_mc** a multi-channel image where each channel corresponds to a specific cell type. For one of the channels, we also reduce the dimensionality. For instance for a grid size of $64$ and for our three cell types we can represent the data by: [image cell types representation](img/img_mc.png). We reduce the shape of the original size given by the **PhysiCell_settings.xml** file by discretizing the continuous environment into a uniform grid. We also compute $r_{x}=\lfloor \frac{width}{gridsize_{x}}\rfloor$ and $r_{y}=\lfloor\frac{height}{gridsize_{y}}\rfloor$. In our environment, $r_{x}=r_{y}$ because $width = height$ and $gridsize_{x}=gridsize_{y}=gridsize=64$
 
 The size of the bins is calculated by mapping the continuous coordinates into discrete indices. Specifically:
 
@@ -155,7 +155,7 @@ Formally, for each cell:
 ```
 By dividing by $r_{x}r_{y}$, we normalize the count so that the value in each bin represents an **area contribution**, ensuring that our image values stay approximately in the range $[0,1]$.
 This produces an image tensor of shape $(\text{num cell types}, gridsize, gridsize)$,
-where each channel counts the number of cells of a given type in each spatial bin![image cell types](img/multi_channels.png).
+where each channel counts the number of cells of a given type in each spatial bin![image cell types](img/img_mc.png).
 
 The second state space is **scalars** a mathematical function that computes the **cell count for each cell type**.
 
@@ -197,7 +197,7 @@ Use your favorite text editor (here we use nano) to open the **sac_tib.py** file
 nano custom_modules/physigym/physigym/envs/sac_tib.py
 ```
 
-Scroll down to **class Args** and adjust the following settings:
+Scroll down to **run** and adjust the following settings:
 + wandb\_track: bool = *False*
 
 <!-- bue 20250611: anythong else, if you only wanna run with tenserboard?
