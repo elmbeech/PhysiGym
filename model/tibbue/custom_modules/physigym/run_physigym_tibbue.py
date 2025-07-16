@@ -39,7 +39,7 @@ b_episode_over = False
 while not b_episode_over:
 
     # policy according to o_observation
-    d_action = {"drug_1": np.array([0.3], dtype=np.float16)}
+    d_action = {"drug_1": np.array([0.5], dtype=np.float32)}
     print("observation:", sorted(o_observation))
     print("reward:", r_reward)
     print("info:", sorted(d_info))
