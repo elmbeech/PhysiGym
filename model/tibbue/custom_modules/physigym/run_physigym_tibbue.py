@@ -19,16 +19,18 @@
 
 
 # library
-from extending import physicell
 import gymnasium
 import numpy as np
 import physigym
-from random import randrange
 
 # load PhysiCell Gymnasium environment
 # %matplotlib
 # env = gymnasium.make("physigym/ModelPhysiCellEnv-v0", settingxml="config/PhysiCell_settings.xml", cell_type_cmap="turbo", figsize=(8,6), render_mode="human", render_fps=10, verbose=True, **kwargs)
-env = gymnasium.make("physigym/ModelPhysiCellEnv-v0")
+env = gymnasium.make(
+    "physigym/ModelPhysiCellEnv-v0",
+    cell_type_cmap={"tumor":"yellow", "cell_1":"navy", "cell_2":"green"},
+    render_mode="human"
+)
 
 # reset the environment
 r_reward = 0.0
@@ -38,14 +40,10 @@ o_observation, d_info = env.reset()
 b_episode_over = False
 while not b_episode_over:
 
-    # policy according to o_observation
-    d_action = {"drug_1": np.array([0.5], dtype=np.float32)}
-    print("observation:", sorted(o_observation))
-    print("reward:", r_reward)
-    print("info:", sorted(d_info))
-    print("action:", sorted(d_action))
+    # apply policy according to o_observation
+    d_action = {"drug_1": np.array([0.2], dtype=np.float32)}
 
-    # action
+    # apply action
     o_observation, r_reward, b_terminated, b_truncated, d_info = env.step(d_action)
     b_episode_over = b_terminated or b_truncated
     print("episode_over:", b_episode_over)

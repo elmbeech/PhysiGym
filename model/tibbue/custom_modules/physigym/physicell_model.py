@@ -64,7 +64,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             self,
             settingxml="config/PhysiCell_settings.xml",
             cell_type_cmap="turbo",
-            figsize=(6, 6),  # inch
+            figsize=(9, 9),  # inch
             render_mode=None,
             render_fps=10,
             verbose=True,
