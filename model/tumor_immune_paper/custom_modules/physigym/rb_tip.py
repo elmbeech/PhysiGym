@@ -215,7 +215,42 @@ class ReplayBuffer:
 
 
 if __name__ == "__main__":
-    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        rb = ReplayBuffer(
+            state_dim=(
+                144,
+                8,
+            ),
+            action_dim=(1,),
+            device=torch.device(device),
+            buffer_size=2e5,
+            batch_size=64,
+            use_torch_tensors=True,
+        )
+
+        # Suppose your state/action/reward/next_state/done are already torch tensors
+        local_batch = [
+            (
+                torch.randn((144, 8), device=device),
+                torch.randn(1, device=device),
+                torch.tensor(1.0, device=device),
+                torch.randn(
+                    (
+                        144,
+                        8,
+                    ),
+                    device=device,
+                ),
+                torch.tensor(0, device=device, dtype=torch.uint8),
+            )
+            for _ in range(128)
+        ]
+        rb.add_batch(local_batch)
+        sampled = rb.sample()
+        print(sampled["state"].shape)
+    else:
+        device = "cpu"
     rb = ReplayBuffer(
         state_dim=(10,),
         action_dim=(4,),
