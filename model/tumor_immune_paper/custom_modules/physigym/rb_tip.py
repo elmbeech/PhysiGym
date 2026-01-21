@@ -38,14 +38,12 @@ class ReplayBuffer:
         batch_size,
         state_type=np.float32,
         is_graph=False,
-        observation_mode: str = None,
         use_torch_tensors=False,  # New flag
     ):
         self.device = device
         self.buffer_size = int(buffer_size)
         self.batch_size = batch_size
         self.is_graph = is_graph
-        self.observation_mode = observation_mode
         self.use_torch_tensors = use_torch_tensors
 
         self.buffer_index = 0
