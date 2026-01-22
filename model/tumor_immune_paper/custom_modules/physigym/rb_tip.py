@@ -38,13 +38,11 @@ class ReplayBuffer:
         batch_size,
         state_type=np.float32,
         is_graph=False,
-        use_torch_tensors=False,  # New flag
     ):
         self.device = device
         self.buffer_size = int(buffer_size)
         self.batch_size = batch_size
         self.is_graph = is_graph
-        self.use_torch_tensors = use_torch_tensors
 
         self.buffer_index = 0
         self.full = False
@@ -53,7 +51,7 @@ class ReplayBuffer:
             # For variable-size graphs, use a deque
             self.buffer = deque(maxlen=self.buffer_size)
         else:
-            if self.use_torch_tensors:
+            try:
                 # Preallocate torch tensors on the device
                 torch_dtype = np2torch_dtype(state_type)
                 self.state = torch.empty(
@@ -71,7 +69,7 @@ class ReplayBuffer:
                 self.done = torch.empty(
                     (self.buffer_size, 1), dtype=torch.uint8, device=device
                 )
-            else:
+            except:
                 # Use NumPy arrays
                 self.state = np.empty((self.buffer_size, *state_dim), dtype=state_type)
                 self.next_state = np.empty(

@@ -153,9 +153,7 @@ class FastBlock(nn.Module):
 # Full encoder
 # -----------------------------
 class FastSetEncoder(nn.Module):
-    def __init__(
-        self, input_dim, dim=64, depth=2, heads=4, use_relative_bias=True
-    ):
+    def __init__(self, input_dim, dim=64, depth=2, heads=4, use_relative_bias=True):
         super().__init__()
 
         self.embed = nn.Linear(input_dim, dim)
@@ -198,6 +196,9 @@ class FeatureExtractor(nn.Module):
 
         self.is_graph = cfg["is_graph"]
         self.is_image = False
+        self.is_tranformer_node = (
+            True if "transformer" in cfg["observation_mode"] else False
+        )
 
         obs_shape = cfg["observation_space_shape"] if not self.is_graph else None
 
@@ -208,6 +209,8 @@ class FeatureExtractor(nn.Module):
                 node_feature_dim=node_feature_dim
             )
             self.feature_size = 128
+        elif self.is_tranformer_node:
+            layers = FastSetEncoder(input_dim=obs_shape[-1])
 
         else:
             self.is_image = len(obs_shape) == 3  # (C, H, W)
