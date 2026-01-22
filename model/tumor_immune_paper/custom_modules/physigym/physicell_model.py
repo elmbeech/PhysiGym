@@ -21,16 +21,14 @@
 # library
 from extending import physicell
 from gymnasium import spaces
-from gymnasium.spaces.graph import GraphInstance
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from matplotlib import colors
 import numpy as np
 import os
 import pandas as pd
 from physigym.envs.physicell_core import CorePhysiCellEnv
 import skimage as ski
 from tysserand import tysserand as ty
+from sklearn.cluster import KMeans
 
 
 # function
@@ -97,6 +95,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         self.node_dim = 1
         self.edge_dim = 1
         self.k = 3  # number of connections k (knn)
+        self.max_clusters = 144
+        self.features = 8
         # call super class init
         super().__init__(
             settingxml=settingxml,
@@ -267,7 +267,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             o_observation_space = spaces.Box(
                 low=0,
                 high=1,
-                shape=(8, 145),
+                shape=(self.max_clusters, self.features),
                 dtype=np.float32,
             )
 
@@ -485,11 +485,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 "node_mask": node_mask,
                 "edge_mask": edge_mask,
             }
-        elif self.kwargs["observation_mode"] == "transformer_nodes":
-            import math
-            import numpy as np
-            from sklearn.cluster import KMeans
-
+        elif mode == "transformer_nodes":
             df = df_alive.set_index("ID", drop=True)
 
             # ---- compute number of clusters ----
@@ -499,7 +495,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 return int(fibo[idx])
 
             n_clusters = _compute_fibo(len(df))
-
+            data = np.zeros((self.max_clusters, self.features), dtype=np.float32)
             # ---- clustering ----
             coords = df[["x", "y"]].to_numpy(np.float32)
 
@@ -518,9 +514,6 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             n_types = len(self.cell_type_unique)
             total_len = len(df)
 
-            # ============================================================
-            # 1️⃣ TYPE PROPORTIONS  → shape (K, 3)
-            # ============================================================
             counts = np.zeros((n_clusters, n_types), dtype=np.float32)
 
             np.add.at(counts, (labels, type_idx), 1)
@@ -561,23 +554,14 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             # ============================================================
             # 3️⃣ FINAL OBSERVATION → (K, 8)
             # ============================================================
-            o_observation = np.concatenate([type_props, stats], axis=1).astype(
+            o_observation = np.concatenate([stats, type_props], axis=1).astype(
                 np.float32
             )
 
-            MAX_CLUSTERS = 145
-            FEATURES = 8
-
             K = o_observation.shape[0]
 
-            # ---- transpose to (8, K) ----
-            o_obs = o_observation.T  # (8, K)
-
             # ---- pad with zeros to (8, 145) ----
-            o_padded = np.zeros((FEATURES, MAX_CLUSTERS), dtype=np.float32)
-            o_padded[:, :K] = o_obs
-
-            o_observation = o_padded
+            data[:K, :] = o_observation
 
         else:
             raise ValueError(f"unknown observation type: {mode}")
