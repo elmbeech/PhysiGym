@@ -86,6 +86,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             "img_mc_cells_substrates",
             "graph_delaunay",
             "graph_knn",
+            "transformer_nodes",
         ]:
             raise ValueError(f"Error: unknown observation type: {observation_mode}")
 
