@@ -188,6 +188,88 @@ class FastSetEncoder(nn.Module):
         return x
 
 
+class FeatureCNN(nn.Module):
+    """
+    Lightweight CNN over feature dimension (NOT nodes).
+    """
+
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv1d(8, 1, kernel_size=3, padding=1),
+        )
+        self.proj = nn.Linear(in_dim, out_dim)
+
+    def forward(self, x):
+        # x: (B, N, F)
+        B, N, F = x.shape
+        x = x.view(B * N, 1, F)
+        x = self.net(x)
+        x = x.view(B, N, F)
+        return self.proj(x)
+
+
+class RLTransformerBlock(nn.Module):
+    def __init__(self, dim, heads=2, mlp_ratio=2):
+        super().__init__()
+        self.attn = FastAttention(dim, heads)
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
+        self.ff = nn.Sequential(
+            nn.Linear(dim, dim * mlp_ratio),
+            nn.ReLU(),
+            nn.Linear(dim * mlp_ratio, dim),
+        )
+
+    def forward(self, x, mask=None, bias=None):
+        x = x + self.attn(self.norm1(x), mask, bias)
+        x = x + self.ff(self.norm2(x))
+        return x
+
+
+class RLSetEncoder(nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        token_dim=32,
+        depth=1,
+        heads=2,
+        use_relative_bias=True,
+    ):
+        super().__init__()
+
+        self.pre = FeatureCNN(input_dim, token_dim)
+        self.blocks = nn.ModuleList(
+            [RLTransformerBlock(token_dim, heads) for _ in range(depth)]
+        )
+
+        self.rel_bias = RelativeBias(heads) if use_relative_bias else None
+        self.norm = nn.LayerNorm(token_dim)
+
+    def forward(self, x):
+        """
+        x: (B, N, F), zero rows = padding
+        """
+        mask = (x.abs().sum(dim=-1) > 0).float()
+
+        xy = x[..., :2] if x.size(-1) >= 2 else None
+
+        x = self.pre(x)
+        bias = self.rel_bias(xy) if self.rel_bias else None
+
+        for block in self.blocks:
+            x = block(x, mask, bias)
+
+        x = self.norm(x)
+
+        # masked mean pooling
+        x = (x * mask[..., None]).sum(dim=1) / (mask.sum(dim=1, keepdim=True) + 1e-6)
+
+        return x
+
+
 class FeatureExtractor(nn.Module):
     """Handles both image-based and vector-based state inputs dynamically."""
 
@@ -210,7 +292,10 @@ class FeatureExtractor(nn.Module):
             )
             self.feature_size = 128
         elif self.is_tranformer_node:
-            self.feature_extractor = FastSetEncoder(input_dim=obs_shape[-1], dim=128)
+            if neural_architecture_image == "transformer_encoder":
+                self.feature_extractor = FastSetEncoder(input_dim=obs_shape[-1], dim=64)
+            else:
+                self.feature_extractor = RLSetEncoder(input_dim=obs_shape[-1])
 
             self.feature_size = self._get_feature_size(obs_shape)
         else:
