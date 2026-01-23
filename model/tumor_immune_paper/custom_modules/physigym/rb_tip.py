@@ -53,6 +53,7 @@ class ReplayBuffer:
         else:
             try:
                 # Preallocate torch tensors on the device
+                self.use_torch_tensors = True
                 torch_dtype = np2torch_dtype(state_type)
                 self.state = torch.empty(
                     (self.buffer_size, *state_dim), dtype=torch_dtype, device=device
@@ -97,12 +98,28 @@ class ReplayBuffer:
     def add(self, state, action, reward, next_state, done):
         if not self.is_graph:
             if self.use_torch_tensors:
-                # Expect torch tensors; move to correct device
-                self.state[self.buffer_index].copy_(state.to(self.device))
-                self.action[self.buffer_index].copy_(action.to(self.device))
-                self.reward[self.buffer_index].copy_(reward.to(self.device))
-                self.next_state[self.buffer_index].copy_(next_state.to(self.device))
-                self.done[self.buffer_index].copy_(done.to(self.device))
+                state_t = torch.as_tensor(state)
+                action_t = torch.as_tensor(action)
+                reward_t = torch.as_tensor(reward)
+                next_state_t = torch.as_tensor(next_state)
+                done_t = torch.as_tensor(done)
+
+                self.state[self.buffer_index].copy_(
+                    state_t.to(self.device, non_blocking=True)
+                )
+                self.action[self.buffer_index].copy_(
+                    action_t.to(self.device, non_blocking=True)
+                )
+                self.reward[self.buffer_index].copy_(
+                    reward_t.to(self.device, non_blocking=True)
+                )
+                self.next_state[self.buffer_index].copy_(
+                    next_state_t.to(self.device, non_blocking=True)
+                )
+                self.done[self.buffer_index].copy_(
+                    done_t.to(self.device, non_blocking=True)
+                )
+
             else:
                 # Expect numpy arrays
                 self.state[self.buffer_index] = state
@@ -187,6 +204,13 @@ class ReplayBuffer:
                 action = self.action[idx]
                 reward = self.reward[idx]
                 done = self.done[idx]
+                return {
+                    "state": state,
+                    "action": action,
+                    "reward": reward,
+                    "next_state": next_state,
+                    "done": done,
+                }
             else:
                 # Convert NumPy arrays to tensors
                 state = torch.as_tensor(self.state[idx], device=self.device).float()
@@ -222,7 +246,6 @@ if __name__ == "__main__":
             device=torch.device(device),
             buffer_size=2e5,
             batch_size=64,
-            use_torch_tensors=True,
         )
 
         # Suppose your state/action/reward/next_state/done are already torch tensors
@@ -253,7 +276,6 @@ if __name__ == "__main__":
         device=torch.device(device),
         buffer_size=1000,
         batch_size=32,
-        use_torch_tensors=True,
     )
 
     # Suppose your state/action/reward/next_state/done are already torch tensors

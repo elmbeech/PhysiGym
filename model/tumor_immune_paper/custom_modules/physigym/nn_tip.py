@@ -210,8 +210,9 @@ class FeatureExtractor(nn.Module):
             )
             self.feature_size = 128
         elif self.is_tranformer_node:
-            layers = FastSetEncoder(input_dim=obs_shape[-1])
+            self.feature_extractor = FastSetEncoder(input_dim=obs_shape[-1], dim=128)
 
+            self.feature_size = self._get_feature_size(obs_shape)
         else:
             self.is_image = len(obs_shape) == 3  # (C, H, W)
             if self.is_image:
@@ -250,7 +251,7 @@ class FeatureExtractor(nn.Module):
             return int(np.prod(out.shape[1:]))
 
     def forward(self, x):
-        if self.is_image:
+        if self.is_image or self.is_tranformer_node:
             x = self.feature_extractor(x)  # Apply CNN
             x = x.view(x.size(0), -1)  # Flatten
         elif self.is_graph:
