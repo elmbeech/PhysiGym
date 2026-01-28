@@ -434,3 +434,45 @@ class Actor(nn.Module):
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+
+
+class Encoder(nn.Module):
+    """Handles both image-based and vector-based state inputs dynamically."""
+
+    def __init__(self, cfg, out_channels=32):
+        super().__init__()
+
+        obs_shape = cfg["observation_space_shape"]
+        self.out_channels = out_channels
+        self.is_image = len(obs_shape) == 3  # (C, H, W)
+        if self.is_image:
+            layers = [
+                PixelPreprocess(),
+                ImpalaBlock(obs_shape[0], 16),
+                ImpalaBlock(16, 32),
+                ImpalaBlock(32, self.out_channels),
+                nn.Flatten(),
+            ]
+
+            self.feature_extractor = nn.Sequential(*layers)
+            self.feature_size = self._get_feature_size(obs_shape)
+        else:
+            # simple vector
+            self.feature_extractor = self.fc = nn.Sequential(
+                nn.Linear(obs_shape[0], out_channels),
+                nn.ReLU(),
+                nn.Linear(out_channels, out_channels),
+                nn.ReLU(),
+            )
+            self.feature_size = out_channels
+
+    def _get_feature_size(self, obs_shape):
+        """Pass a dummy tensor through CNN to compute feature size dynamically."""
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, *obs_shape)
+            out = self.feature_extractor(dummy_input)
+            return int(np.prod(out.shape[1:]))
+
+    def forward(self, x):
+        x = self.feature_extractor(x)
+        return x
