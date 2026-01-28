@@ -460,9 +460,9 @@ class Encoder(nn.Module):
             # simple vector
             self.feature_extractor = self.fc = nn.Sequential(
                 nn.Linear(obs_shape[0], out_channels),
-                nn.ReLU(),
+                nn.Mish(),
                 nn.Linear(out_channels, out_channels),
-                nn.ReLU(),
+                nn.Mish(),
             )
             self.feature_size = out_channels
 
