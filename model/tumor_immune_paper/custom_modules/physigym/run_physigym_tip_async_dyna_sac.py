@@ -1,19 +1,17 @@
 # run_physigym_tip_sac_async_mbpo.py
 import argparse
-import os
 import random
 import time
 from copy import deepcopy
 from pathlib import Path
 
-import gymnasium as gym
 import numpy as np
 import torch
 import torch.multiprocessing as mp
 import torch.optim as optim
 import torch.nn.functional as F
+import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
-from torch_geometric.data import Data, Batch
 import wandb
 
 from tqdm import tqdm
@@ -27,29 +25,69 @@ from nn_tip import Encoder
 # --------------------------------------------------------------
 # ---------- Encoder, Actor, Q-network, Dynamics ----------------
 # --------------------------------------------------------------
-import torch.nn as nn
 
 
 class Actor(nn.Module):
-    def __init__(self, d_arg_env, encoder_feature_size):
+    """Policy network (Actor)"""
+
+    LOG_STD_MAX = 2
+    LOG_STD_MIN = -5
+
+    def __init__(self, cfg, encoder_feature_size):
         super().__init__()
         self.encoder_feature_size = encoder_feature_size
-        self.action_dim = np.prod(d_arg_env["action_space_shape"])
-        self.fc = nn.Sequential(
-            nn.Linear(self.encoder_feature_size, 128),
-            nn.Mish(),
-            nn.Linear(128, self.action_dim),
-            nn.Tanh(),
+        self.action_dim = np.prod(cfg["action_space_shape"])
+
+        # Fully connected layers
+        self.fc1 = nn.LazyLinear(256)
+        self.fc2 = nn.LazyLinear(256)
+        self.fc_mean = nn.LazyLinear(self.action_dim)
+        self.fc_logstd = nn.LazyLinear(self.action_dim)
+        self.relu = nn.ReLU()
+        # Action scaling
+        self.register_buffer(
+            "action_scale",
+            torch.tensor(
+                (cfg["action_space_high"] - cfg["action_space_low"]) / 2.0,
+                dtype=torch.float32,
+            ),
+        )
+        self.register_buffer(
+            "action_bias",
+            torch.tensor(
+                (cfg["action_space_high"] + cfg["action_space_low"]) / 2.0,
+                dtype=torch.float32,
+            ),
         )
 
+    def forward(self, z):
+        z = self.relu(self.fc1(z))
+        z = self.relu(self.fc2(z))
+
+        mean = self.fc_mean(z)
+        log_std = self.fc_logstd(z)
+        log_std = torch.tanh(log_std)
+        log_std = self.LOG_STD_MIN + 0.5 * (self.LOG_STD_MAX - self.LOG_STD_MIN) * (
+            log_std + 1
+        )  # Stable variance scaling
+
+        return mean, log_std
+
     def get_action(self, z):
-        mean = self.fc(z)
-        log_std = torch.zeros_like(mean)
+        mean, log_std = self(z)
         std = log_std.exp()
-        dist = torch.distributions.Normal(mean, std)
-        action = dist.rsample()
-        log_pi = dist.log_prob(action).sum(dim=-1, keepdim=True)
-        return action, log_pi, dist
+        normal = torch.distributions.Normal(mean, std)
+
+        x_t = normal.rsample()  # Reparameterization trick
+        y_t = torch.tanh(x_t)
+        action = y_t * self.action_scale + self.action_bias
+
+        log_prob = normal.log_prob(x_t)
+        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + 1e-6)
+        log_prob = log_prob.sum(1, keepdim=True)
+
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        return action, log_prob, mean
 
 
 class QNetwork(nn.Module):
@@ -88,12 +126,12 @@ class DynamicsModel(nn.Module):
         self.delta_state = nn.Linear(hidden_dim, latent_dim)
         self.reward = nn.Linear(hidden_dim, 1)
 
-    def forward(self, state_feat, action):
-        x = torch.cat([state_feat, action], dim=-1)
+    def forward(self, z, action):
+        x = torch.cat([z, action], dim=-1)
         h = self.model(x)
-        next_state_feat = state_feat + self.delta_state(h)
+        next_z = z + self.delta_state(h)
         reward = self.reward(h)
-        return next_state_feat, reward
+        return next_z, reward
 
 
 # --------------------------------------------------------------
@@ -129,7 +167,7 @@ def actor_process(
     env_info_queue.put(d_arg_env)
 
     encoder_local = Encoder(d_arg_env)
-    actor_local = Actor(d_arg_env).cpu()
+    actor_local = Actor(d_arg_env, encoder_local.feature_size).cpu()
     actor_local.eval()
     num_envs = envs.num_envs
     episode_returns = np.zeros(num_envs, dtype=np.float64)
@@ -139,10 +177,8 @@ def actor_process(
         # fetch new policy
         try:
             while True:
-                new_params = actor_queue.get_nowait()
-                actor_local.load_state_dict(new_params)
-                new_params = encoder_queue.get_nowait()
-                encoder_local.load_state_dict(new_params)
+                actor_local.load_state_dict(actor_queue.get_nowait())
+                encoder_local.load_state_dict(encoder_queue.get_nowait())
         except queue.Empty:
             pass
 
@@ -262,7 +298,7 @@ def run_async_sac(d_arg):
     encoder = Encoder(
         d_arg_env, out_channels=d_arg["architecture"]["encoder"]["out_channels"]
     ).to(device)
-    actor = Actor(d_arg_env).to(device)
+    actor = Actor(d_arg_env, encoder.feature_size).to(device)
     qf1 = QNetwork(d_arg_env).to(device)
     qf2 = QNetwork(d_arg_env).to(device)
     dynamics = DynamicsModel(
@@ -294,9 +330,17 @@ def run_async_sac(d_arg):
     qf1_target = deepcopy(qf1)
     qf2_target = deepcopy(qf2)
     q_optimizer = optim.Adam(
-        list(qf1.parameters()) + list(qf2.parameters()), lr=d_arg["rl"]["q_lr"]
+        list(qf1.parameters()) + list(qf2.parameters()) + list(encoder.parameters()),
+        lr=d_arg["rl"]["q_lr"],
     )
     actor_optimizer = optim.Adam(actor.parameters(), lr=d_arg["rl"]["policy_lr"])
+
+    encoder = Encoder(d_arg_env, out_channels=...).to(device)
+    encoder_target = deepcopy(encoder).to(device)
+    encoder_target.eval()
+
+    for p in encoder_target.parameters():
+        p.requires_grad = False
 
     # Alpha entropy
     if d_arg["rl"]["autotune"]:
@@ -355,36 +399,45 @@ def run_async_sac(d_arg):
             # --- Train dynamics model MBPO ---
             if len(rb) > d_arg["rl"]["batch_size"]:
                 batch_real = rb.sample()
-                state_feat = encoder(batch_real["state"])
-                next_state_feat = encoder(batch_real["next_state"])
+
+                # ---- Encode real data ----
+                z = encoder(batch_real["state"])
+                with torch.no_grad():
+                    z_next = encoder_target(batch_real["next_state"])
+
                 action = batch_real["action"]
                 reward = batch_real["reward"]
 
-                pred_next, pred_r = dynamics(state_feat, action)
-                loss_dyn = F.mse_loss(pred_next, next_state_feat) + F.mse_loss(
-                    pred_r.squeeze(), reward
+                # ---- Train dynamics ----
+                pred_next, pred_r = dynamics(z.detach(), action)
+
+                loss_dyn = (
+                    F.mse_loss(pred_next, z_next)
+                    + F.mse_loss(pred_r.squeeze(), reward)
                 )
+
                 dynamics_optimizer.zero_grad()
                 loss_dyn.backward()
                 dynamics_optimizer.step()
 
-                # Model-based rollouts
-                rollout_horizon = 5
-                mb_state_feat = state_feat.clone().detach()
+                # ---- Model-based rollouts (latent space) ----
+                rollout_horizon = 3  # 3–5 is ideal
 
-                for t in range(rollout_horizon):
-                    mb_action, _, _ = actor.get_action(mb_state_feat)
-                    mb_next_feat, mb_r = dynamics(mb_state_feat, mb_action)
-                    mb_done = torch.zeros(len(mb_state_feat), device=device)
+                with torch.no_grad():
+                    z = encoder_target(batch_real["state"])
 
-                    # Add directly to replay buffer
+                for _ in range(rollout_horizon):
+                    a, _, _ = actor.get_action(z)
+                    z_next, r = dynamics(z, a)
+
+                    done = torch.zeros((len(z), 1), device=device)
+
                     rb_model.add_batch(
-                        list(zip(mb_state_feat, mb_action, mb_r, mb_next_feat, mb_done))
+                        list(zip(z, a, r, z_next, done))
                     )
 
-                    mb_state_feat = (
-                        mb_next_feat.detach()
-                    )  # detach to avoid backprop through MBPO
+                    z = z_next
+
 
             # --- Log stats ---
             while not stats_queue.empty():
@@ -480,6 +533,12 @@ def run_async_sac(d_arg):
                         target_param.data.copy_(
                             tau * param.data + (1.0 - tau) * target_param.data
                         )
+                    for param, target_param in zip(
+                        encoder.parameters(), encoder_target.parameters()
+                    ):
+                        target_param.data.copy_(
+                            tau * param.data + (1.0 - tau) * target_param.data
+                        )
 
             # Send updated policy
             if grad_steps % 64 == 0:
@@ -488,10 +547,7 @@ def run_async_sac(d_arg):
                         {k: v.detach().cpu() for k, v in actor.state_dict().items()}
                     )
                     encoder_queue.put_nowait(
-                        {
-                            k: v.detach().cpu()
-                            for k, v in encoder_queue.state_dict().items()
-                        }
+                        {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
                     )
                 except queue.Full:
                     pass
@@ -548,7 +604,7 @@ if __name__ == "__main__":
     }
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TIP",
+        "project": "SAC_ASYNC_MBPO_TIP",
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,
