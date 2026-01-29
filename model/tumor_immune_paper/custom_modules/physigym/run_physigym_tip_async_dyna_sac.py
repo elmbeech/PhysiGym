@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 # Your project imports
 from vectorized_tip import vec_envs
-from rb_tip import ReplayBuffer
+from rb_tip import ReplayBuffer, ReplayBufferLatentSpace
 import queue
 from nn_tip import Encoder
 
@@ -37,7 +37,7 @@ class Actor(nn.Module):
         self.action_dim = np.prod(d_arg_env["action_space_shape"])
         self.fc = nn.Sequential(
             nn.Linear(self.encoder.feature_size, 128),
-            nn.ReLU(),
+            nn.Mish(),
             nn.Linear(128, self.action_dim),
             nn.Tanh(),
         )
@@ -54,7 +54,7 @@ class Actor(nn.Module):
 
 
 class QNetwork(nn.Module):
-    def __init__(self, d_arg_env, arch="impala", encoder=None):
+    def __init__(self, d_arg_env, encoder=None):
         super().__init__()
         self.encoder = encoder
         self.fc = nn.Sequential(
@@ -62,7 +62,7 @@ class QNetwork(nn.Module):
                 self.encoder.feature_size + np.prod(d_arg_env["action_space_shape"]),
                 128,
             ),
-            nn.ReLU(),
+            nn.Mish(),
             nn.Linear(128, 1),
         )
 
@@ -79,15 +79,15 @@ class DynamicsModel(nn.Module):
     Output: next_state_feat, reward
     """
 
-    def __init__(self, state_dim, action_dim, hidden_dim=256):
+    def __init__(self, latent_dim, action_dim, hidden_dim=256):
         super().__init__()
         self.model = nn.Sequential(
-            nn.Linear(state_dim + action_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
+            nn.Linear(latent_dim + action_dim, hidden_dim),
+            nn.Mish(),
+            nn.Linear(hidden_dim, latent_dim),
+            nn.Mish(),
         )
-        self.delta_state = nn.Linear(hidden_dim, state_dim)
+        self.delta_state = nn.Linear(hidden_dim, latent_dim)
         self.reward = nn.Linear(hidden_dim, 1)
 
     def forward(self, state_feat, action):
@@ -248,18 +248,11 @@ def run_async_sac(d_arg):
         state_type=d_arg_env["observation_space_dtype"],
         is_graph=d_arg_env["is_graph"],
     )
-    rb_model = ReplayBufferLatentSpace(
-        state_dim=d_arg_env["observation_space_shape"],
-        action_dim=d_arg_env["action_space_shape"],
-        device=device,
-        buffer_size=d_arg["rl"]["buffer_size"],
-        batch_size=d_arg["rl"]["batch_size"],
-        state_type=d_arg_env["observation_space_dtype"],
-        is_graph=d_arg_env["is_graph"],
-    )
 
     # --- Networks ---
-    encoder = Encoder(d_arg_env).to(device)
+    encoder = Encoder(
+        d_arg_env, out_channels=d_arg["architecture"]["encoder"]["out_channels"]
+    ).to(device)
     actor = Actor(d_arg_env, encoder=encoder).to(device)
     qf1 = QNetwork(d_arg_env, encoder=encoder).to(device)
     qf2 = QNetwork(d_arg_env, encoder=encoder).to(device)
@@ -270,22 +263,22 @@ def run_async_sac(d_arg):
     dynamics_optimizer = optim.Adam(dynamics.parameters(), lr=3e-4)
 
     # Dummy forward to initialize networks
-    if d_arg_env["is_graph"]:
-        dummy_graph = Data(
-            x=torch.zeros((1, d_arg_env["node_feature_dim"]), dtype=torch.float32),
-            edge_index=torch.zeros((2, 1), dtype=torch.long),
-            edge_attr=torch.zeros((1, 1), dtype=torch.float32),
-        )
-        dummy_state = Batch.from_data_list([dummy_graph]).to(device)
-    else:
-        dummy_state = torch.zeros(
-            (1, *d_arg_env["observation_space_shape"]),
-            device=device,
-            dtype=torch.float32,
-        )
+    rb_model = ReplayBufferLatentSpace(
+        latent_dim=encoder.feature_size,
+        action_dim=d_arg_env["action_space_shape"],
+        device=device,
+        buffer_size=int(d_arg["rl"]["buffer_size"] * 0.1),
+        batch_size=int(d_arg["rl"]["batch_size"] * 0.5),
+    )
+
+    dummy_state = torch.zeros(
+        (1, *d_arg_env["observation_space_shape"]),
+        device=device,
+        dtype=torch.float32,
+    )
 
     with torch.no_grad():
-        actions_tensor, _, _ = actor.get_action(dummy_state)
+        actions_tensor, _, _ = actor.get_action(encoder(dummy_state))
         _ = qf1(dummy_state, actions_tensor)
         _ = qf2(dummy_state, actions_tensor)
 
@@ -396,7 +389,6 @@ def run_async_sac(d_arg):
                     "charts/step": stat["step"],
                     "charts/timestamp": stat["timestamp"],
                     "charts/grad_steps": grad_steps,
-                    "charts/buffer_size": len(rb),
                     "charts/samples_drained": drained,
                 }
                 for tag, value in log_dict.items():
@@ -514,8 +506,7 @@ if __name__ == "__main__":
     parser.add_argument("--settingcells", default="config/cells.csv")
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--gpu", type=str, default="true")
-    parser.add_argument("--observation_mode", default="transformer_nodes")
-    parser.add_argument("--neural_architecture_image", default="impala")
+    parser.add_argument("--observation_mode", default="img_mc_cells")
     parser.add_argument("--max_time_episode", type=float, default=12900.0)
     parser.add_argument("--learning_starts", type=int, default=1e4)
     parser.add_argument("--total_timesteps", type=int, default=int(2e5))
@@ -616,7 +607,7 @@ if __name__ == "__main__":
         "rl": d_arg_rl,
         "wrapper": d_arg_physigym_wrapper,
         "model": d_arg_physigym_model,
-        "neural_architecture_image": args.neural_architecture_image,
+        "architecture": {"encoder": {"out_channels": 128}},
         "generation": d_arg_generation,
     }
     d_arg["model"]["output_dir"] = (
