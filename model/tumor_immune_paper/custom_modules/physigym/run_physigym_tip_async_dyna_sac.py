@@ -31,20 +31,19 @@ import torch.nn as nn
 
 
 class Actor(nn.Module):
-    def __init__(self, d_arg_env, encoder=None):
+    def __init__(self, d_arg_env, encoder_feature_size):
         super().__init__()
-        self.encoder = encoder
+        self.encoder_feature_size = encoder_feature_size
         self.action_dim = np.prod(d_arg_env["action_space_shape"])
         self.fc = nn.Sequential(
-            nn.Linear(self.encoder.feature_size, 128),
+            nn.Linear(self.encoder_feature_size, 128),
             nn.Mish(),
             nn.Linear(128, self.action_dim),
             nn.Tanh(),
         )
 
-    def get_action(self, x):
-        feat = self.encoder(x)
-        mean = self.fc(feat)
+    def get_action(self, z):
+        mean = self.fc(z)
         log_std = torch.zeros_like(mean)
         std = log_std.exp()
         dist = torch.distributions.Normal(mean, std)
@@ -54,21 +53,20 @@ class Actor(nn.Module):
 
 
 class QNetwork(nn.Module):
-    def __init__(self, d_arg_env, encoder=None):
+    def __init__(self, d_arg_env, encoder_feature_size):
         super().__init__()
-        self.encoder = encoder
+        self.encoder_feature_size = encoder_feature_size
         self.fc = nn.Sequential(
             nn.Linear(
-                self.encoder.feature_size + np.prod(d_arg_env["action_space_shape"]),
+                self.encoder_feature_size + np.prod(d_arg_env["action_space_shape"]),
                 128,
             ),
             nn.Mish(),
             nn.Linear(128, 1),
         )
 
-    def forward(self, x, action):
-        feat = self.encoder(x)
-        q = self.fc(torch.cat([feat, action], dim=-1))
+    def forward(self, z, action):
+        q = self.fc(torch.cat([z, action], dim=-1))
         return q
 
 
@@ -102,7 +100,13 @@ class DynamicsModel(nn.Module):
 # Actor process (unchanged)
 # --------------------------------------------------------------
 def actor_process(
-    actor_queue, sample_queue, stats_queue, d_arg, stop_event, env_info_queue
+    actor_queue,
+    sample_queue,
+    stats_queue,
+    d_arg,
+    stop_event,
+    env_info_queue,
+    encoder_queue,
 ):
     envs = vec_envs(d_arg)
     begin_time = time.time()
@@ -125,7 +129,7 @@ def actor_process(
     env_info_queue.put(d_arg_env)
 
     encoder_local = Encoder(d_arg_env)
-    actor_local = Actor(d_arg_env, encoder=encoder_local).cpu()
+    actor_local = Actor(d_arg_env).cpu()
     actor_local.eval()
     num_envs = envs.num_envs
     episode_returns = np.zeros(num_envs, dtype=np.float64)
@@ -137,6 +141,8 @@ def actor_process(
             while True:
                 new_params = actor_queue.get_nowait()
                 actor_local.load_state_dict(new_params)
+                new_params = encoder_queue.get_nowait()
+                encoder_local.load_state_dict(new_params)
         except queue.Empty:
             pass
 
@@ -147,7 +153,8 @@ def actor_process(
         else:
             with torch.no_grad():
                 x = torch.from_numpy(obs).cpu()
-                actions_tensor, _, _ = actor_local.get_action(x)
+                z = encoder_local(x).cpu()
+                actions_tensor, _, _ = actor_local.get_action(z)
                 actions = actions_tensor.cpu().numpy()
 
         next_obs, rewards, dones, infos = envs.step(actions)
@@ -218,8 +225,9 @@ def run_async_sac(d_arg):
     random.seed(seed)
 
     actor_queue = mp.Queue(maxsize=5)
-    sample_queue = mp.Queue(maxsize=10000)
-    stats_queue = mp.Queue(maxsize=1000)
+    encoder_queue = mp.Queue(maxsize=5)
+    sample_queue = mp.Queue(maxsize=1000)
+    stats_queue = mp.Queue(maxsize=100)
     env_info_queue = mp.Queue(maxsize=1)
     stop_event = mp.Event()
 
@@ -232,6 +240,7 @@ def run_async_sac(d_arg):
             d_arg,
             stop_event,
             env_info_queue,
+            encoder_queue,
         ),
     )
     actor_proc.start()
@@ -253,9 +262,9 @@ def run_async_sac(d_arg):
     encoder = Encoder(
         d_arg_env, out_channels=d_arg["architecture"]["encoder"]["out_channels"]
     ).to(device)
-    actor = Actor(d_arg_env, encoder=encoder).to(device)
-    qf1 = QNetwork(d_arg_env, encoder=encoder).to(device)
-    qf2 = QNetwork(d_arg_env, encoder=encoder).to(device)
+    actor = Actor(d_arg_env).to(device)
+    qf1 = QNetwork(d_arg_env).to(device)
+    qf2 = QNetwork(d_arg_env).to(device)
     dynamics = DynamicsModel(
         state_dim=encoder.feature_size,
         action_dim=np.prod(d_arg_env["action_space_shape"]),
@@ -407,10 +416,10 @@ def run_async_sac(d_arg):
                 batch_model = rb_model.sample()  # latent features
 
                 # Concatenate (real observations + decoded latent if needed)
-                state = torch.cat(
+                z = torch.cat(
                     [encoder(batch_real["state"]), batch_model["state"]], dim=0
                 )
-                next_state = torch.cat(
+                next_z = torch.cat(
                     [encoder(batch_real["next_state"]), batch_model["next_state"]],
                     dim=0,
                 )
@@ -419,9 +428,9 @@ def run_async_sac(d_arg):
                 done = torch.cat([batch_real["done"], batch_model["done"]], dim=0)
 
                 with torch.no_grad():
-                    next_actions, next_log_pi, _ = actor.get_action(next_state)
-                    q1_next = qf1_target(next_state, next_actions)
-                    q2_next = qf2_target(next_state, next_actions)
+                    next_actions, next_log_pi, _ = actor.get_action(next_z)
+                    q1_next = qf1_target(next_z, next_actions)
+                    q2_next = qf2_target(next_z, next_actions)
                     min_q_next = torch.min(q1_next, q2_next) - alpha * next_log_pi
                     next_q = (
                         reward.flatten()
@@ -430,8 +439,8 @@ def run_async_sac(d_arg):
                         * min_q_next.squeeze()
                     )
 
-                q1 = qf1(state, action).view(-1)
-                q2 = qf2(state, action).view(-1)
+                q1 = qf1(z, action).view(-1)
+                q2 = qf2(z, action).view(-1)
                 qf_loss = F.mse_loss(q1, next_q) + F.mse_loss(q2, next_q)
 
                 q_optimizer.zero_grad()
@@ -440,9 +449,9 @@ def run_async_sac(d_arg):
                 grad_steps += 1
 
                 if grad_steps % d_arg["rl"]["policy_frequency"] == 0:
-                    actions_pi, log_pi, _ = actor.get_action(state)
-                    q1_pi = qf1(state, actions_pi)
-                    q2_pi = qf2(state, actions_pi)
+                    actions_pi, log_pi, _ = actor.get_action(z=z)
+                    q1_pi = qf1(z, actions_pi)
+                    q2_pi = qf2(z, actions_pi)
                     actor_loss = (alpha * log_pi - torch.min(q1_pi, q2_pi)).mean()
                     actor_optimizer.zero_grad()
                     actor_loss.backward()
@@ -477,6 +486,12 @@ def run_async_sac(d_arg):
                 try:
                     actor_queue.put_nowait(
                         {k: v.detach().cpu() for k, v in actor.state_dict().items()}
+                    )
+                    encoder_queue.put_nowait(
+                        {
+                            k: v.detach().cpu()
+                            for k, v in encoder_queue.state_dict().items()
+                        }
                     )
                 except queue.Full:
                     pass
