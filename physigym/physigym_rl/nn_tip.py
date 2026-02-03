@@ -82,16 +82,204 @@ class GraphFeatureExtractor(nn.Module):
         return global_mean_pool(x, data.batch)
 
 
+class RelativeBias(nn.Module):
+    def __init__(self, heads, hidden=32):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(2, hidden), nn.ReLU(), nn.Linear(hidden, heads)
+        )
+
+    def forward(self, xy):  # (B, N, 2)
+        delta = xy[:, :, None, :] - xy[:, None, :, :]  # (B, N, N, 2)
+        return self.mlp(delta)  # (B, N, N, H)
+
+
+# -----------------------------
+# Fast attention block
+# -----------------------------
+class FastAttention(nn.Module):
+    def __init__(self, dim, heads=4):
+        super().__init__()
+        self.heads = heads
+        self.scale = (dim // heads) ** -0.5
+        self.qkv = nn.Linear(dim, dim * 3, bias=False)
+        self.proj = nn.Linear(dim, dim)
+
+    def forward(self, x, attn_mask=None, bias=None):
+        B, N, D = x.shape
+        H = self.heads
+
+        qkv = self.qkv(x).view(B, N, 3, H, D // H)
+        q, k, v = qkv.unbind(dim=2)
+
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+
+        if bias is not None:
+            attn = attn + bias.permute(0, 3, 1, 2)
+
+        if attn_mask is not None:
+            attn = attn.masked_fill(attn_mask[:, None, None, :] == 0, -1e9)
+
+        attn = attn.softmax(dim=-1)
+        out = (attn @ v).transpose(1, 2).reshape(B, N, D)
+
+        return self.proj(out)
+
+
+# -----------------------------
+# Encoder block
+# -----------------------------
+class FastBlock(nn.Module):
+    def __init__(self, dim, heads=4, mlp_ratio=2):
+        super().__init__()
+        self.attn = FastAttention(dim, heads)
+        self.ff = nn.Sequential(
+            nn.Linear(dim, dim * mlp_ratio), nn.ReLU(), nn.Linear(dim * mlp_ratio, dim)
+        )
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
+
+    def forward(self, x, attn_mask=None, bias=None):
+        x = x + self.attn(self.norm1(x), attn_mask, bias)
+        x = x + self.ff(self.norm2(x))
+        return x
+
+
+# -----------------------------
+# Full encoder
+# -----------------------------
+class FastSetEncoder(nn.Module):
+    def __init__(self, input_dim, dim=64, depth=2, heads=4, use_relative_bias=True):
+        super().__init__()
+
+        self.embed = nn.Linear(input_dim, dim)
+        self.blocks = nn.ModuleList([FastBlock(dim, heads) for _ in range(depth)])
+
+        self.rel_bias = RelativeBias(heads) if use_relative_bias else None
+        self.norm = nn.LayerNorm(dim)
+
+    def forward(self, x):
+        """
+        x: (B, N, input_dim)
+           zero rows = padding
+        """
+
+        # padding mask: 1 = valid, 0 = padding
+        mask = (x.abs().sum(dim=-1) > 0).float()
+
+        xy = x[..., :2]  # raw x,y
+
+        x = self.embed(x)
+
+        bias = self.rel_bias(xy) if self.rel_bias else None
+
+        for block in self.blocks:
+            x = block(x, mask, bias)
+
+        x = self.norm(x)
+
+        # mean pooling over valid nodes
+        x = (x * mask[..., None]).sum(dim=1) / (mask.sum(dim=1, keepdim=True) + 1e-6)
+
+        return x
+
+
+class FeatureCNN(nn.Module):
+    """
+    Lightweight CNN over feature dimension (NOT nodes).
+    """
+
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv1d(1, 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv1d(8, 1, kernel_size=3, padding=1),
+        )
+        self.proj = nn.Linear(in_dim, out_dim)
+
+    def forward(self, x):
+        # x: (B, N, F)
+        B, N, F = x.shape
+        x = x.view(B * N, 1, F)
+        x = self.net(x)
+        x = x.view(B, N, F)
+        return self.proj(x)
+
+
+class RLTransformerBlock(nn.Module):
+    def __init__(self, dim, heads=2, mlp_ratio=2):
+        super().__init__()
+        self.attn = FastAttention(dim, heads)
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
+        self.ff = nn.Sequential(
+            nn.Linear(dim, dim * mlp_ratio),
+            nn.ReLU(),
+            nn.Linear(dim * mlp_ratio, dim),
+        )
+
+    def forward(self, x, mask=None, bias=None):
+        x = x + self.attn(self.norm1(x), mask, bias)
+        x = x + self.ff(self.norm2(x))
+        return x
+
+
+class RLSetEncoder(nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        token_dim=32,
+        depth=1,
+        heads=2,
+        use_relative_bias=True,
+    ):
+        super().__init__()
+
+        self.pre = FeatureCNN(input_dim, token_dim)
+        self.blocks = nn.ModuleList(
+            [RLTransformerBlock(token_dim, heads) for _ in range(depth)]
+        )
+
+        self.rel_bias = RelativeBias(heads) if use_relative_bias else None
+        self.norm = nn.LayerNorm(token_dim)
+
+    def forward(self, x):
+        """
+        x: (B, N, F), zero rows = padding
+        """
+        mask = (x.abs().sum(dim=-1) > 0).float()
+
+        xy = x[..., :2] if x.size(-1) >= 2 else None
+
+        x = self.pre(x)
+        bias = self.rel_bias(xy) if self.rel_bias else None
+
+        for block in self.blocks:
+            x = block(x, mask, bias)
+
+        x = self.norm(x)
+
+        # masked mean pooling
+        x = (x * mask[..., None]).sum(dim=1) / (mask.sum(dim=1, keepdim=True) + 1e-6)
+
+        return x
+
+
 class FeatureExtractor(nn.Module):
-    """Handles both image-based and vector-based state inputs dynamically."""
+    """Handles image-based, vector-based and graph-based state inputs dynamically."""
 
     def __init__(self, cfg, neural_architecture_image="impala", **kwargs):
         super().__init__()
 
-        self.is_graph = cfg["is_graph"]
-        self.is_image = False
-
-        obs_shape = cfg["observation_space_shape"] if not self.is_graph else None
+        obs_shape = cfg["observation_space_shape"]
+        self.is_graph = True if "graph" in cfg["observation_mode"] else False
+        self.is_tranformer_node = True if "transformer" in cfg["observation_mode"] else False
+        self.is_image = (len(obs_shape) == 3) and not self.is_tranformer_node
 
         if self.is_graph:
             # Assume node features have fixed dimension
@@ -100,36 +288,41 @@ class FeatureExtractor(nn.Module):
                 node_feature_dim=node_feature_dim
             )
             self.feature_size = 128
-
-        else:
-            self.is_image = len(obs_shape) == 3  # (C, H, W)
-            if self.is_image:
-                if neural_architecture_image == "impala":
-                    layers = [
-                        PixelPreprocess(),
-                        ImpalaBlock(obs_shape[0], 16),
-                        ImpalaBlock(16, 32),
-                        ImpalaBlock(32, 32),
-                        nn.Flatten(),
-                    ]
-                elif neural_architecture_image == "hadamax":
-                    layers = [
-                        PixelPreprocess(),
-                        HadamaxBlock(obs_shape[0], 16),
-                        HadamaxBlock(16, 32),
-                        HadamaxBlock(32, 32),
-                        nn.Flatten(),
-                    ]
-                else:
-                    raise ValueError(
-                        f"Error: unknown neural architecture: {neural_architecture_image}"
-                    )
-
-                self.feature_extractor = nn.Sequential(*layers)
-                self.feature_size = self._get_feature_size(obs_shape)
+        elif self.is_tranformer_node:
+            if neural_architecture_image == "transformer_encoder":
+                self.feature_extractor = FastSetEncoder(input_dim=obs_shape[-1], dim=64)
             else:
-                self.feature_extractor = nn.Identity()
-                self.feature_size = int(np.prod(obs_shape))
+                self.feature_extractor = RLSetEncoder(input_dim=obs_shape[-1])
+
+            self.feature_size = self._get_feature_size(obs_shape)
+
+        elif self.is_image:
+            if neural_architecture_image == "impala":
+                layers = [
+                    PixelPreprocess(),
+                    ImpalaBlock(obs_shape[0], 16),
+                    ImpalaBlock(16, 32),
+                    ImpalaBlock(32, 32),
+                    nn.Flatten(),
+                ]
+            elif neural_architecture_image == "hadamax":
+                layers = [
+                    PixelPreprocess(),
+                    HadamaxBlock(obs_shape[0], 16),
+                    HadamaxBlock(16, 32),
+                    HadamaxBlock(32, 32),
+                    nn.Flatten(),
+                ]
+            else:
+                raise ValueError(
+                    f"Error: unknown neural architecture: {neural_architecture_image}"
+                )
+
+            self.feature_extractor = nn.Sequential(*layers)
+            self.feature_size = self._get_feature_size(obs_shape)
+        else:
+            self.feature_extractor = nn.Identity()
+            self.feature_size = int(np.prod(obs_shape))
 
     def _get_feature_size(self, obs_shape):
         """Pass a dummy tensor through CNN to compute feature size dynamically."""
@@ -139,11 +332,53 @@ class FeatureExtractor(nn.Module):
             return int(np.prod(out.shape[1:]))
 
     def forward(self, x):
-        if self.is_image:
+        if self.is_image or self.is_tranformer_node:
             x = self.feature_extractor(x)  # Apply CNN
             x = x.view(x.size(0), -1)  # Flatten
         elif self.is_graph:
             x = self.feature_extractor(x)
+        return x
+
+
+class Encoder(nn.Module):
+    """Handles both image-based and vector-based state inputs dynamically."""
+
+    def __init__(self, cfg, out_channels=32):
+        super().__init__()
+
+        obs_shape = cfg["observation_space_shape"]
+        self.out_channels = out_channels
+        self.is_image = len(obs_shape) == 3  # (C, H, W)
+        if self.is_image:
+            layers = [
+                PixelPreprocess(),
+                ImpalaBlock(obs_shape[0], 16),
+                ImpalaBlock(16, 32),
+                ImpalaBlock(32, self.out_channels),
+                nn.Flatten(),
+            ]
+
+            self.feature_extractor = nn.Sequential(*layers)
+            self.feature_size = self._get_feature_size(obs_shape)
+        else:
+            # simple vector
+            self.feature_extractor = self.fc = nn.Sequential(
+                nn.Linear(obs_shape[0], out_channels),
+                nn.ReLU(),
+                nn.Linear(out_channels, out_channels),
+                nn.ReLU(),
+            )
+            self.feature_size = out_channels
+
+    def _get_feature_size(self, obs_shape):
+        """Pass a dummy tensor through CNN to compute feature size dynamically."""
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, *obs_shape)
+            out = self.feature_extractor(dummy_input)
+            return int(np.prod(out.shape[1:]))
+
+    def forward(self, x):
+        x = self.feature_extractor(x)
         return x
 
 
