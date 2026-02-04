@@ -1,10 +1,10 @@
 import gymnasium as gym
 from gymnasium.spaces import Box
 import numpy as np
-from network_field import create_csv
 import os
 import pandas as pd
 import shutil
+from network_field import create_csv
 
 
 # ============================================================
@@ -98,7 +98,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
             df = pd.DataFrame(self.list_data)
             if "mean_drugs" in df.columns:
                 df["cumulative_mean_drugs"] = df["mean_drugs"].cumsum()
-            df["cumulative_reward"] = df["reward"].cumsum()
+            if "reward" in df.columns:
+                df["cumulative_reward"] = df["reward"].cumsum()
             df.to_csv(os.path.join(self.output_dir_episode, "data.csv"), index=False)
             dst_path = os.path.join(
                 self.output_dir_episode,
