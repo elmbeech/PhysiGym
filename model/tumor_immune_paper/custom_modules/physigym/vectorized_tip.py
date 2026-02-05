@@ -134,11 +134,7 @@ def make_physigym_env(env_id: int, cfg: dict):
         model_cfg_copy["settingxml"] = env_xml
 
         del model_cfg_copy["output_dir"]
-        # if env_id != 0:
-        #    wrapper_cfg["frequency_save_data"] = None
-        # Create the base PhysiCell environment
         env = gym.make(**model_cfg_copy)
-        # Wrap it for simplified action and custom reward
         env = PhysiCellModelWrapper(env, **wrapper_cfg)
 
         generation_cfg["seed"] = int(rng.integers(0, 2**12 - 1)) + env_id
