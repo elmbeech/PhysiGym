@@ -5,6 +5,7 @@ import os
 import pandas as pd
 import shutil
 from network_field import create_csv
+from pathlib import Path
 
 
 # ============================================================
@@ -70,10 +71,15 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self.cell_positions_folder, self.cell_name_file
         )
         self.generation_cfg = None
-        self.output_dir = (
+        self.no_generation_cfg = None
+        self.generate_physicell_data = None
+        self.mode = "train"  # "train" | "test"
+        self.dataset_name = "default"
+        self.base_output_dir = (
             self.env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text
         )
-        os.makedirs(self.output_dir, exist_ok=True)
+
+        os.makedirs(self.base_output_dir, exist_ok=True)
         self.frequency_save_data = frequency_save_data
         self.list_data = []
         self.seed = int(
@@ -88,30 +94,39 @@ class PhysiCellModelWrapper(gym.Wrapper):
     def observation_mode(self):
         return self.env.unwrapped.observation_mode
 
+    def _episode_output_dir(self, run_idx: int):
+        return os.path.join(
+            self.base_output_dir,
+            self.mode,
+            "episodes",
+            f"run_{str(run_idx).zfill(6)}",
+        )
+
     def save_data(self):
-        if self.frequency_save_data is not None and self.env.unwrapped.episode != -1:
-            self.output_dir_episode = os.path.join(
-                self.output_dir, f"episode{str(self.env.unwrapped.episode).zfill(8)}"
-            )
-            os.makedirs(self.output_dir_episode, exist_ok=True)
-            episode = self.env.unwrapped.episode
-            df = pd.DataFrame(self.list_data)
-            if "mean_drugs" in df.columns:
-                df["cumulative_mean_drugs"] = df["mean_drugs"].cumsum()
-            if "reward" in df.columns:
-                df["cumulative_reward"] = df["reward"].cumsum()
-            df.to_csv(os.path.join(self.output_dir_episode, "data.csv"), index=False)
-            dst_path = os.path.join(
-                self.output_dir_episode,
-                os.path.basename(self.generation_cfg["csv_path"]),
-            )
-            shutil.copy(self.generation_cfg["csv_path"], dst_path)
-            self.list_data = []
-            self.output_dir_episode = os.path.join(
-                self.output_dir, f"episode{str(episode).zfill(8)}"
-            )
-        else:
-            None
+        run_idx = self.env.unwrapped.episode
+        if run_idx == -1 or self.frequency_save_data is None:
+            return
+        out_dir = self._episode_output_dir(run_idx)
+
+        os.makedirs(out_dir, exist_ok=True)
+        df = pd.DataFrame(self.list_data)
+        if "mean_drugs" in df.columns:
+            df["cumulative_mean_drugs"] = df["mean_drugs"].cumsum()
+        if "reward" in df.columns:
+            df["cumulative_reward"] = df["reward"].cumsum()
+        df.to_csv(os.path.join(out_dir, "data.csv"), index=False)
+        dst_path = os.path.join(
+            out_dir,
+            os.path.basename(self.csv_path_init),
+        )
+        shutil.copy(self.csv_path_init, dst_path)
+        self.list_data = []
+        self.env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[0].text = (
+            "true" if self.generate_physicell_data else "false"
+        )
+        self.env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = (
+            "true" if self.generate_physicell_data else "false"
+        )
 
     def step(self, action: np.ndarray):
         d_action = {
@@ -148,34 +163,103 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
         return obs, reward, terminated, truncated, info
 
-    def process_update_generation_cfg(self, generation_cfg=None):
-        if self.generation_cfg is not None:
-            self.generation_cfg["seed"] += self.env.unwrapped.episode
-            create_csv(**self.generation_cfg)
-        else:
-            if generation_cfg is not None and self.generation_cfg is None:
-                self.generation_cfg = generation_cfg.copy()
+    def initial_condition_generation(self, generation_cfg=None):
+        self.mode = "train"
 
-                # complete spatial bounds from env
-                self.generation_cfg["x_min"] = self.env.unwrapped.x_min * 0.9
-                self.generation_cfg["y_min"] = self.env.unwrapped.y_min * 0.9
-                self.generation_cfg["x_max"] = self.env.unwrapped.x_max * 0.9
-                self.generation_cfg["y_max"] = self.env.unwrapped.y_max * 0.9
+        # --------------------------------------------------
+        # 1. Initialize base generation config ONCE
+        # --------------------------------------------------
+        if self.generation_cfg is None:
+            if generation_cfg is None:
+                raise ValueError("generation_cfg must be provided at least once")
 
-                # ensure seed exists
-                self.generation_cfg.setdefault("seed", self.seed)
-        self.generation_cfg["csv_path"] = self.csv_path_init
+            self.generation_cfg = generation_cfg.copy()
 
-    def reset(self, seed=None, options=None, generation_cfg=None, **kwargs):
+            # ---- env-derived spatial bounds ----
+            self.generation_cfg["x_min"] = self.env.unwrapped.x_min * 0.9
+            self.generation_cfg["y_min"] = self.env.unwrapped.y_min * 0.9
+            self.generation_cfg["x_max"] = self.env.unwrapped.x_max * 0.9
+            self.generation_cfg["y_max"] = self.env.unwrapped.y_max * 0.9
+
+            # ---- default seed ----
+            self.generation_cfg.setdefault("seed", self.seed)
+
+            # ---- dataset name ----
+            self.dataset_name = self.generation_cfg.get("dataset", "generated")
+
+        # --------------------------------------------------
+        # 2. Dataset folder (stable)
+        # --------------------------------------------------
+        ic_dir = os.path.join(
+            self.base_output_dir,
+            self.mode,
+            "initial_conditions",
+            self.dataset_name,
+        )
+        os.makedirs(ic_dir, exist_ok=True)
+
+        # --------------------------------------------------
+        # 3. Episode-specific config
+        # --------------------------------------------------
+        episode = self.env.unwrapped.episode
+        csv_path = os.path.join(ic_dir, f"ic_{str(episode).zfill(6)}.csv")
+
+        gen_cfg = self.generation_cfg.copy()
+        gen_cfg["seed"] = self.generation_cfg["seed"] + episode
+        gen_cfg["csv_path"] = csv_path
+
+        # --------------------------------------------------
+        # 4. Generate + activate
+        # --------------------------------------------------
+        gen_cfg["seed"] += episode
+
+        create_csv(**gen_cfg)
+        self.update_cell_path_cell_folder(csv_path)
+
+    def update_cell_path_cell_folder(self, path_cells_csv: str):
+        p = Path(path_cells_csv)
+        cell_positions_folder = str(p.parent)
+        cell_name_file = p.name
+        self.env.get_wrapper_attr("x_root").xpath(
+            "//initial_conditions/cell_positions/folder"
+        )[0].text = cell_positions_folder
+        self.csv_path_init = path_cells_csv
+        self.env.get_wrapper_attr("x_root").xpath(
+            "//initial_conditions/cell_positions/filename"
+        )[0].text = cell_name_file
+        self.cell_name_file = cell_name_file
+        self.cell_positions_folder = cell_positions_folder
+
+    def initial_condition(self, no_generation_cfg=None):
+        self.mode = "test"
+        self.dataset_name = no_generation_cfg.get("dataset", "replay")
+
+        if not hasattr(self, "list_csv"):
+            self.list_csv = no_generation_cfg["list_csv"]
+            self.current_csv_idx = 0
+
+        csv_path = self.list_csv[self.current_csv_idx]
+        self.current_csv_idx += 1
+
+        self.update_cell_path_cell_folder(csv_path)
+
+    def reset(
+        self,
+        seed=None,
+        options=None,
+        generation_cfg=None,
+        no_generation_cfg=None,
+        **kwargs,
+    ):
         if options is None:
             options = {}
-
+        self.save_data()
         if seed is not None:
             self.seed = seed
-
-        self.process_update_generation_cfg(generation_cfg)
-
-        self.save_data()
+        if generation_cfg is not None:
+            self.initial_condition_generation(generation_cfg)
+        if no_generation_cfg is not None:
+            self.initial_condition(no_generation_cfg=no_generation_cfg)
 
         self.info = {"prev_mean_drugs": 0}
 

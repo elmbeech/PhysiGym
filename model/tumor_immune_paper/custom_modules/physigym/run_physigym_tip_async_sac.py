@@ -452,6 +452,7 @@ def run_async_sac(d_arg):
     except KeyboardInterrupt:
         print("Interrupted by user — shutting down.")
     finally:
+        stop_event.set()
         # Save the learned actor policy
         actor_save_path = os.path.join(d_arg["model"]["output_dir"], "actor_final.pth")
         os.makedirs(d_arg["model"]["output_dir"], exist_ok=True)
@@ -459,13 +460,11 @@ def run_async_sac(d_arg):
         print(f"Actor weights saved to {actor_save_path}")
         os.makedirs(d_arg["model"]["output_dir"], exist_ok=True)
         pickle_path = os.path.join(d_arg["model"]["output_dir"], "d_arg.pkl")
-
         with open(pickle_path, "wb") as f:
             pickle.dump(d_arg, f)
         print(f"d_arg saved to {pickle_path}")
 
         # Ask actor process to stop, wait and terminate if necessary
-        stop_event.set()
         actor_proc.join(timeout=5.0)
         if actor_proc.is_alive():
             actor_proc.terminate()
