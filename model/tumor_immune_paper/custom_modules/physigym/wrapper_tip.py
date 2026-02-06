@@ -86,6 +86,11 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self.env.get_wrapper_attr("x_root").xpath("//random_seed")[0].text
         )
 
+    def change_xml(self, keys: list[str], elements: list):
+        for key, element in zip(keys, elements):
+            self.env.get_wrapper_attr("x_root").xpath(key)[0].text = element
+        self.env.get_wrapper_attr("x_tree").write(self.settingxml, pretty_print=True)
+
     @property
     def action_space(self):
         return self._action_space
@@ -121,11 +126,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
         )
         shutil.copy(self.csv_path_init, dst_path)
         self.list_data = []
-        self.env.get_wrapper_attr("x_root").xpath("//save/full_data/enable")[0].text = (
-            "true" if self.generate_physicell_data else "false"
-        )
-        self.env.get_wrapper_attr("x_root").xpath("//save/SVG/enable")[0].text = (
-            "true" if self.generate_physicell_data else "false"
+        self.change_xml(
+            key=["//save/folder", "//save/full_data/enable", "//save/SVG/enable"],
+            element=[
+                out_dir,
+                "true" if self.generate_physicell_data else "false",
+                "true" if self.generate_physicell_data else "false",
+            ],
         )
 
     def step(self, action: np.ndarray):
@@ -220,13 +227,17 @@ class PhysiCellModelWrapper(gym.Wrapper):
         p = Path(path_cells_csv)
         cell_positions_folder = str(p.parent)
         cell_name_file = p.name
-        self.env.get_wrapper_attr("x_root").xpath(
-            "//initial_conditions/cell_positions/folder"
-        )[0].text = cell_positions_folder
+        self.change_xml(
+            key=[
+                "//initial_conditions/cell_positions/folder",
+                "//initial_conditions/cell_positions/filename",
+            ],
+            element=[
+                cell_positions_folder,
+                cell_name_file,
+            ],
+        )
         self.csv_path_init = path_cells_csv
-        self.env.get_wrapper_attr("x_root").xpath(
-            "//initial_conditions/cell_positions/filename"
-        )[0].text = cell_name_file
         self.cell_name_file = cell_name_file
         self.cell_positions_folder = cell_positions_folder
 
