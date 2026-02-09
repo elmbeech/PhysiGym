@@ -134,7 +134,11 @@ def make_physigym_env(env_id: int, cfg: dict):
         model_cfg_copy["settingxml"] = env_xml
 
         del model_cfg_copy["output_dir"]
+        # if env_id != 0:
+        #    wrapper_cfg["frequency_save_data"] = None
+        # Create the base PhysiCell environment
         env = gym.make(**model_cfg_copy)
+        # Wrap it for simplified action and custom reward
         env = PhysiCellModelWrapper(env, **wrapper_cfg)
 
         generation_cfg["seed"] = int(rng.integers(0, 2**12 - 1)) + env_id
@@ -241,7 +245,7 @@ if __name__ == "__main__":
             "id": "physigym/ModelPhysiCellEnv-v0",
             "settingxml": args.settingxml,
             "settingcells": args.settingcells,
-            "output_dir": None,
+            "output_dir": "./output_full_data",
             "cell_type_cmap": {
                 "tumor": "yellow",
                 "cell_1": "green",
@@ -249,7 +253,7 @@ if __name__ == "__main__":
                 "other_tissue": "red",
             },
             "figsize": (6, 6),
-            "observation_mode": "scalars_cells_substrates",  # "img_mc_cells_substrates",
+            "observation_mode": "img_mc_cells",  # "img_mc_cells_substrates",
             "render_mode": None,
             "verbose": False,
             "img_rgb_grid_size_x": 64,
@@ -263,7 +267,7 @@ if __name__ == "__main__":
             "w_cell": 0.7,
             "w_increase": 0.2,
             "w_amount": 0.1,
-            "frequency_save_data": None,
+            "frequency_save_data": True,
         },
         "generation": {
             "x_min": -256,
@@ -315,19 +319,18 @@ if __name__ == "__main__":
 
         df_combined.to_csv(csv_path, index=False)
 
+    _num_envs_seed_time(seeds=[1], list_num_envs=[1])
+
     def _num_envs_seed_time_cells(
-        seeds=[1, 16, 32, 64, 128],
-        list_tumor_cells=[4096, 2048, 1024, 512, 256],
-        cfg=cfg,
+        seeds=[1, 16, 32, 64, 128], list_tumor_cells=[4096, 2048, 1024, 512], cfg=cfg
     ):
+
         records = []
-        cfg["vectorization"]["num_envs"] = 9  # Optimal for 5 rl threads
+        cfg["vectorization"]["num_envs"] = 1  # Optimal for 5 rl threads
 
         for seed in seeds:
             for tumor_cells in list_tumor_cells:
-                cfg["generation"]["params"]["tumor"]["cancer_cells"]["number_cells"] = (
-                    tumor_cells
-                )
+                cfg["generation"]["params"]["tumor"]["number_cells"] = tumor_cells
                 cfg["generation"]["seed"] = seed
 
                 time_needed = run_vectorized(cfg)
@@ -351,4 +354,5 @@ if __name__ == "__main__":
             df_combined = df_new
 
         df_combined.to_csv(csv_path, index=False)
-        _num_envs_seed_time_cells()
+
+    # _num_envs_seed_time_cells()
