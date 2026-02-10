@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 import shutil
-from network_field import create_csv
+from init_conds import generate_initial_condition
 from pathlib import Path
 
 
@@ -171,7 +171,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
     def initial_condition_generation(self, generation_cfg=None):
-        self.mode = "train"
 
         # --------------------------------------------------
         # 1. Initialize base generation config ONCE
@@ -219,8 +218,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # 4. Generate + activate
         # --------------------------------------------------
         gen_cfg["seed"] += episode
-
-        create_csv(**gen_cfg)
+        
+        generate_initial_condition(**gen_cfg)
         self.update_cell_path_cell_folder(csv_path)
 
     def update_cell_path_cell_folder(self, path_cells_csv: str):
@@ -242,7 +241,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.cell_positions_folder = cell_positions_folder
 
     def initial_condition(self, no_generation_cfg=None):
-        self.mode = "test"
         self.dataset_name = no_generation_cfg.get("dataset", "replay")
 
         if not hasattr(self, "list_csv"):
@@ -268,7 +266,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         if seed is not None:
             self.seed = seed
         if generation_cfg is not None:
-            self.initial_condition_generation(generation_cfg)
+            self.initial_condition_generation(generation_cfg=generation_cfg)
         if no_generation_cfg is not None:
             self.initial_condition(no_generation_cfg=no_generation_cfg)
 
