@@ -103,9 +103,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 "iqr": lambda x: np.percentile(x, 75) - np.percentile(x, 25),
                 "mad": lambda x: np.median(np.abs(x - np.median(x))),
             }
-            try:
-                self.reducers = self.reducers[name]
-            except:
+            if name not in self.reducers:
                 raise ValueError(f"Error: unknown reducers: {name}")
         if "img" in observation_mode:
             self.observation_mode = (
@@ -511,9 +509,6 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             )
 
         elif self.observation_mode in ["graph_delaunay", "graph_knn"]:
-            cell_type_indices = (
-                self.df_alive["type"].map(self.cell_type_to_id).to_numpy()
-            )
             self.df_alive.set_index("ID", inplace=True)
             coords = self.df_alive[["x", "y"]].values
 

@@ -30,8 +30,6 @@ import sys
 import faulthandler
 
 faulthandler.enable(file=sys.stderr, all_threads=True)
-import physigym
-from extending import physicell
 
 
 # ============================================================

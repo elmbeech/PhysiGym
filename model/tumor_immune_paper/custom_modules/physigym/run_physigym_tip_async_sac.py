@@ -25,7 +25,6 @@ from nn_tip import Actor, QNetwork
 from rb_tip import ReplayBuffer
 
 
-from torch.multiprocessing import Event, Queue
 import queue
 
 
