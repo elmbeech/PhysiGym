@@ -87,20 +87,22 @@ def make_physigym_env(env_id: int, cfg: dict):
         "wrapper": {...}
     }
     """
-
-    sim_cfg = cfg["simulation"]
-    vect_cfg = cfg["vectorization"]
     model_cfg = cfg["model"]
+    sim_cfg = cfg["simulation"]
     wrapper_cfg = cfg["wrapper"]
+    vect_cfg = cfg["vectorization"]
+    seed = cfg["simulation"]["seed"]
     generation_cfg = cfg["generation"]
-
     base_xml = model_cfg["settingxml"]
+    rl_threads = vect_cfg["rl_threads"]
     base_cells = model_cfg["settingcells"]
-    model_cfg_copy = model_cfg.copy()
     threads_per_env = vect_cfg["threads_per_env"]
-    seed = sim_cfg["seed"]
+
+    model_cfg_copy = model_cfg.copy()
+
     master_seed = seed if seed is not None else 42
     rng = np.random.default_rng(master_seed)
+
     env_xml = f"config/PhysiCell_settings_env{env_id}.xml"
     env_cells = f"config/cells_{env_id}.csv"
     if not os.path.exists(env_xml):
@@ -109,8 +111,8 @@ def make_physigym_env(env_id: int, cfg: dict):
         shutil.copy(base_cells, env_cells)
     if model_cfg_copy["output_dir"] is None:
         model_cfg_copy["output_dir"] = "output"
+
     del model_cfg_copy["settingcells"]
-    rl_threads = vect_cfg["rl_threads"]
 
     def _init():
         assign_cpu_affinity(env_id, threads_per_env, offset_threads=rl_threads)
@@ -129,16 +131,11 @@ def make_physigym_env(env_id: int, cfg: dict):
             0
         ].text = f"cells_{env_id}.csv"
         tree.write(env_xml, pretty_print=True)
+
         model_cfg_copy["settingxml"] = env_xml
-
         del model_cfg_copy["output_dir"]
-        # if env_id != 0:
-        #    wrapper_cfg["frequency_save_data"] = None
-        # Create the base PhysiCell environment
         env = gym.make(**model_cfg_copy)
-        # Wrap it for simplified action and custom reward
         env = PhysiCellModelWrapper(env, **wrapper_cfg)
-
         generation_cfg["seed"] = int(rng.integers(0, 2**12 - 1)) + env_id
         env.reset(generation_cfg=generation_cfg)
 
