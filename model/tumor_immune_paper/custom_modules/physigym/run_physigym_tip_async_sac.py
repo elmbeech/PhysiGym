@@ -88,7 +88,7 @@ def actor_process(
     }
     full_data_train_timesteps = int(
         d_arg["rl"]["percent_train_full_data_timesteps"]
-        * d_arg["rl"]["train_timesteps"]
+        * d_arg["rl"]["train_total_timesteps"]
     )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
     actor_local = Actor(
@@ -157,7 +157,7 @@ def actor_process(
         # Bookkeeping per-env
         episode_returns += rewards.astype(np.float64)
         local_step += num_envs - len(envs.dead_envs)
-        if (not mode_switched) and local_step > d_arg["rl"]["train_timesteps"]:
+        if (not mode_switched) and local_step > d_arg["rl"]["train_total_timesteps"]:
             pending_mode = "test"
             mode_switched = True
 
