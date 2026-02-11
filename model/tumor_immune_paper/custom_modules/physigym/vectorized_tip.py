@@ -187,6 +187,10 @@ def run_vectorized(cfg: dict):
             dtype=np.float32,
         )
         _, _, _, infos = envs.step(actions)
+        if local_step > 1000:
+            envs.set_attr("mode", "test")
+            envs.set_attr("generate_physicell_data", True)
+
         local_step += num_envs - len(envs.dead_envs)
         if all(info.get("disabled", False) for info in infos):
             print("[Actor] All envs dead — restarting VecEnv")

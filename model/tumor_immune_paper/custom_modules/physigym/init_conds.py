@@ -53,7 +53,6 @@ def generate_balanced_fields(
     local_noise_level = local_noise_level / 100 + 0.05
 
     fields = {}
-
     for key in params.keys():
         correlation_length = params[key]["correlation_length"]
         # === Génère un bruit local filtré ===
@@ -289,8 +288,8 @@ def generate_initial_condition(
             jit_t=random.randint(5, 15),
             jit_c=random.randint(5, 10),
         )
-        params |= params_1
-        df = circular_mode(params, bounds)
+        params_1 |= params
+        df = circular_mode(params_1, bounds)
 
     elif mode == "asymmetric":
         df = asymmetric_mode(params, bounds)
