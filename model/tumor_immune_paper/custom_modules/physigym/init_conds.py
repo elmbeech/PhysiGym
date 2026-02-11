@@ -259,8 +259,7 @@ def generate_synthetic_network_field(
             "type": phenotypes_final,
         }
     )
-    df_cells[["x", "y"]] += bounds[0][0], bounds[0][1]
-
+    df_cells[["x", "y"]] += bounds[0][0], bounds[1][0]
     return df_cells
 
 
@@ -279,7 +278,8 @@ def generate_initial_condition(
     )
     set_seed(seed)
     bounds = ((x_min, x_max), (y_min, y_max))
-
+    if isinstance(mode, (list, tuple)):
+        mode = random.choice(mode)
     if mode == "circular":
         params_1 = dict(
             r1=random.uniform(0.1, 0.4),

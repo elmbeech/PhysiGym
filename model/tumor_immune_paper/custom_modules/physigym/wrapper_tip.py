@@ -72,7 +72,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         )
         self.generation_cfg = None
         self.no_generation_cfg = None
-        self.generate_physicell_data = None
+        self.generate_physicell_data = False
         self.mode = "train"  # "train" | "test"
         self.dataset_name = "default"
         self.base_output_dir = (
@@ -85,6 +85,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.seed = int(
             self.env.get_wrapper_attr("x_root").xpath("//random_seed")[0].text
         )
+        self.settingxml = self.env.get_wrapper_attr("settingxml")
 
     def change_xml(self, keys: list[str], elements: list):
         for key, element in zip(keys, elements):
@@ -127,8 +128,8 @@ class PhysiCellModelWrapper(gym.Wrapper):
         shutil.copy(self.csv_path_init, dst_path)
         self.list_data = []
         self.change_xml(
-            key=["//save/folder", "//save/full_data/enable", "//save/SVG/enable"],
-            element=[
+            keys=["//save/folder", "//save/full_data/enable", "//save/SVG/enable"],
+            elements=[
                 out_dir,
                 "true" if self.generate_physicell_data else "false",
                 "true" if self.generate_physicell_data else "false",
@@ -186,12 +187,19 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self.generation_cfg["y_min"] = self.env.unwrapped.y_min * 0.9
             self.generation_cfg["x_max"] = self.env.unwrapped.x_max * 0.9
             self.generation_cfg["y_max"] = self.env.unwrapped.y_max * 0.9
-
+            self.mode_train = self.generation_cfg["mode_train"]
+            self.mode_test = self.generation_cfg["mode_test"]
+            del self.generation_cfg["mode_train"]
+            del self.generation_cfg["mode_test"]
             # ---- default seed ----
             self.generation_cfg.setdefault("seed", self.seed)
 
             # ---- dataset name ----
             self.dataset_name = self.generation_cfg.get("dataset", "generated")
+
+        self.generation_cfg["mode"] = (
+            self.mode_train if self.mode == "train" else self.mode_test
+        )
 
         # --------------------------------------------------
         # 2. Dataset folder (stable)
@@ -218,7 +226,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # 4. Generate + activate
         # --------------------------------------------------
         gen_cfg["seed"] += episode
-        
         generate_initial_condition(**gen_cfg)
         self.update_cell_path_cell_folder(csv_path)
 
@@ -227,11 +234,11 @@ class PhysiCellModelWrapper(gym.Wrapper):
         cell_positions_folder = str(p.parent)
         cell_name_file = p.name
         self.change_xml(
-            key=[
+            keys=[
                 "//initial_conditions/cell_positions/folder",
                 "//initial_conditions/cell_positions/filename",
             ],
-            element=[
+            elements=[
                 cell_positions_folder,
                 cell_name_file,
             ],
@@ -262,13 +269,17 @@ class PhysiCellModelWrapper(gym.Wrapper):
     ):
         if options is None:
             options = {}
-        self.save_data()
+
         if seed is not None:
             self.seed = seed
-        if generation_cfg is not None:
+
+        if generation_cfg is not None or self.generation_cfg is not None:
             self.initial_condition_generation(generation_cfg=generation_cfg)
-        if no_generation_cfg is not None:
+
+        if no_generation_cfg is not None or self.no_generation_cfg is not None:
             self.initial_condition(no_generation_cfg=no_generation_cfg)
+
+        self.save_data()
 
         self.info = {"prev_mean_drugs": 0}
 
