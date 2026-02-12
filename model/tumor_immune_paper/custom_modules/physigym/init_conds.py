@@ -53,6 +53,7 @@ def generate_balanced_fields(
     local_noise_level = local_noise_level / 100 + 0.05
 
     fields = {}
+    print(params)
     for key in params.keys():
         correlation_length = params[key]["correlation_length"]
         # === Génère un bruit local filtré ===
@@ -176,21 +177,24 @@ def connected_mode(params, bounds):
 
 
 def rectangle_mode(params, bounds):
+    nb_tumor_cells = params["tumor"]["number_cells"]
+    nb_cell_1 = params["cell_1"]["number_cells"]
+    value_tumor = random.uniform(0.2, 0.4)
+    value_cell_1 = random.uniform(0.7, 0.9)
+
     tumor = df_cells(
         np.random.uniform(
             bounds[0][0],
-            bounds[0][0] + 0.4 * (bounds[0][1] - bounds[0][0]),
-            params["tumor"]["number_cells"],
+            bounds[0][0] + value_tumor * (bounds[0][1] - bounds[0][0]),
+            nb_tumor_cells,
         ),
-        np.random.uniform(bounds[1][0], bounds[1][1], params["tumor"]["number_cells"]),
+        np.random.uniform(bounds[1][0], bounds[1][1], nb_tumor_cells),
         "tumor",
     )
 
     cell1 = df_cells(
-        np.random.uniform(
-            bounds[0][1] * 0.85, bounds[0][1], params["cell_1"]["number_cells"]
-        ),
-        np.random.uniform(bounds[1][0], bounds[1][1], params["cell_1"]["number_cells"]),
+        np.random.uniform(bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1),
+        np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
         "cell_1",
     )
 
