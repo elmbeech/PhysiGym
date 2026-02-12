@@ -466,10 +466,15 @@ def run_async_sac(d_arg):
         test_timesteps = d_arg["rl"]["test_timesteps"]
         pbar = tqdm(total=test_timesteps)
 
-        while drained < test_timesteps:
-            pbar.update(drained - pbar.n)
-            local_batch = []
+        test_drained = 0
 
+        while test_drained < test_timesteps:
+            # update progress bar
+            pbar.update(test_drained - pbar.n)
+
+            # --------------------------------------------------
+            # 1) Drain samples → COUNT STEPS
+            # --------------------------------------------------
             while True:
                 try:
                     item = sample_queue.get_nowait()
@@ -478,33 +483,38 @@ def run_async_sac(d_arg):
 
                 # item can be a single transition or a batch
                 if isinstance(item, list):
-                    local_batch.extend(item)
+                    test_drained += len(item)
                 else:
-                    local_batch.append(item)
+                    test_drained += 1
 
-                if local_batch:
-                    drained += len(local_batch)
+            # --------------------------------------------------
+            # 2) Drain stats → LOG TEST EPISODES
+            # --------------------------------------------------
+            while not stats_queue.empty():
+                try:
+                    stat = stats_queue.get_nowait()
+                except queue.Empty:
+                    break
 
-                # 2) Log any stats reported by actors
-                while not stats_queue.empty():
-                    try:
-                        stat = stats_queue.get_nowait()
-                    except queue.Empty:
-                        break
-                if stat["train_test"] == "test":
-                    log_dict = {
-                        "charts/test_return": stat["episode_return"],
-                        "charts/test_length": stat["episode_length"],
-                        "charts/test_timestamp": stat["timestamp"],
-                        "charts/samples_drained": drained,
-                    }
+                # Only log test episodes
+                if stat.get("train_test") != "test":
+                    continue
+
+                log_dict = {
+                    "charts/test_return": stat["episode_return"],
+                    "charts/test_length": stat["episode_length"],
+                    "charts/test_timestamp": stat["timestamp"],
+                    "charts/test_steps": test_drained,
+                }
+
                 if d_arg["simulation"]["wandb_track"]:
-                    run.log(log_dict)
+                    wandb.log(log_dict, step=test_drained)
                 else:
                     for tag, value in log_dict.items():
-                        writer.add_scalar(tag, value, drained)
-                if d_arg["simulation"]["wandb_track"]:
-                    wandb.log(log_dict, step=drained)
+                        writer.add_scalar(tag, value, test_drained)
+
+            # small sleep to avoid busy-waiting
+            time.sleep(0.05)
 
     except KeyboardInterrupt:
         print("Interrupted by user — shutting down.")
