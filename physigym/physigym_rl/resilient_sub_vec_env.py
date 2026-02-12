@@ -49,17 +49,6 @@ class ResilientSubprocVecEnv(SubprocVecEnv):
         except Exception:
             pass
 
-    def env_method(self, method_name, *args, **kwargs):
-        for i, remote in enumerate(self.remotes):
-            if i in self.dead_envs:
-                continue
-            remote.send(("env_method", (method_name, args, kwargs)))
-        return [
-            remote.recv()
-            for i, remote in enumerate(self.remotes)
-            if i not in self.dead_envs
-        ]
-
     # ------------------------------------------------------------------
     # Step
     # ------------------------------------------------------------------

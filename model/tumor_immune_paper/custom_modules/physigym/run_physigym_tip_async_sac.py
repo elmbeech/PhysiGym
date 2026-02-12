@@ -87,7 +87,6 @@ def actor_process(
         "is_graph": "graph" in d_arg["model"]["observation_mode"],
     }
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-
     actor_local = Actor(
         d_arg_env, d_arg.get("neural_architecture_image", "impala")
     ).cpu()
@@ -98,6 +97,8 @@ def actor_process(
         _, _, _ = actor_local.get_action(obs_nn)
     actor_local.eval()
     num_envs = envs.num_envs
+    pending_mode = "train"
+    mode_switched = False
     episode_returns = np.zeros(num_envs, dtype=np.float64)
     local_step = 0
     while not stop_event.is_set():
@@ -152,10 +153,15 @@ def actor_process(
         # Bookkeeping per-env
         episode_returns += rewards.astype(np.float64)
         local_step += num_envs - len(envs.dead_envs)
+        if (not mode_switched) and local_step > d_arg["rl"]["train_timesteps"]:
+            pending_mode = "test"
+            mode_switched = True
+
+            # Apply to ALL envs at once
+            envs.env_method("set_mode_next_episode", pending_mode)
+
         if local_step > d_arg["rl"]["full_data_timesteps"]:
             envs.set_attr("generate_physicell_data", True)
-        if local_step > d_arg["rl"]["test_timesteps"]:
-            envs.set_attr("mode", "test")
         # Accumulate samples for this env step
         batch_samples = []
 
@@ -193,6 +199,7 @@ def actor_process(
 
             if done:
                 episode_returns[i] = 0.0
+
             batch_samples.append((o, actions[i], float(rewards[i]), no, bool(dones[i])))
 
         if batch_samples:
@@ -316,15 +323,16 @@ def run_async_sac(d_arg):
         )
 
     tau = d_arg["rl"]["tau"]
+    total = d_arg["rl"]["total_timesteps"]
 
-    print("Starting training loop...")
     try:
-        total = d_arg["rl"]["total_timesteps"]
-        pbar = tqdm(total=total)
+        print("Starting training loop...")
+        train_timesteps = d_arg["rl"]["train_timesteps"]
+        pbar = tqdm(total=train_timesteps)
 
         drained = 0
         grad_steps = 0
-        while drained < total:
+        while drained < train_timesteps:
             pbar.update(drained - pbar.n)
             local_batch = []
 
@@ -451,9 +459,36 @@ def run_async_sac(d_arg):
                 except queue.Full:
                     # if actor queue full, skip this update (actor will pick up later)
                     pass
+        print("Starting testing loop...")
+        train_timesteps = d_arg["rl"]["train_timesteps"]
+        pbar = tqdm(total=total)
+
+        while drained < total:
+            pbar.update(drained - pbar.n)
+            while not stats_queue.empty():
+                try:
+                    stat = stats_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if stat["train_test"] == "test":
+                    log_dict = {
+                        "charts/test_return": stat["episode_return"],
+                        "charts/test_length": stat["episode_length"],
+                        "charts/test_timestamp": stat["timestamp"],
+                        "charts/samples_drained": drained,
+                    }
+
+                if d_arg["simulation"]["wandb_track"]:
+                    run.log(log_dict)
+                else:
+                    for tag, value in log_dict.items():
+                        writer.add_scalar(tag, value, drained)
+                if d_arg["simulation"]["wandb_track"]:
+                    wandb.log(log_dict, step=drained)
 
     except KeyboardInterrupt:
         print("Interrupted by user — shutting down.")
+
     finally:
         # Ask actor process to stop, wait and terminate if necessary
         stop_event.set()
@@ -633,7 +668,7 @@ if __name__ == "__main__":
         "policy_lr": 3e-4,
         "gamma": 0.99,
         "num_loops": 3,
-        "test_timesteps": int(3e5),
+        "train_timesteps": int(3e5),
         "full_data_timesteps": int(2.5e5),
     }
 

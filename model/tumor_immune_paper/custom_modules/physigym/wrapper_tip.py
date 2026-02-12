@@ -86,6 +86,14 @@ class PhysiCellModelWrapper(gym.Wrapper):
             self.env.get_wrapper_attr("x_root").xpath("//random_seed")[0].text
         )
         self.settingxml = self.env.get_wrapper_attr("settingxml")
+        self.dt_gym = float(
+            self.env.get_wrapper_attr("x_root")
+            .xpath("//user_parameters/dt_gym")[0]
+            .text
+        )
+
+    def set_mode_next_episode(self, mode: str):
+        self._next_mode = mode
 
     def change_xml(self, keys: list[str], elements: list):
         for key, element in zip(keys, elements):
@@ -128,11 +136,23 @@ class PhysiCellModelWrapper(gym.Wrapper):
         shutil.copy(self.csv_path_init, dst_path)
         self.list_data = []
         self.change_xml(
-            keys=["//save/folder", "//save/full_data/enable", "//save/SVG/enable"],
+            keys=[
+                "//save/folder",
+                "//save/full_data/enable",
+                "//save/SVG/enable",
+                "//save/full_data/interval",
+                "//save/SVG/interval",
+            ],
             elements=[
                 out_dir,
                 "true" if self.generate_physicell_data else "false",
                 "true" if self.generate_physicell_data else "false",
+                str(self.dt_gym)
+                if self.generate_physicell_data
+                else str(self.dt_gym * 4),
+                str(self.dt_gym)
+                if self.generate_physicell_data
+                else str(self.dt_gym * 4),
             ],
         )
 
@@ -165,6 +185,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
                 "number_tumor": info["number_tumor"],
                 "number_cell_1": info["number_cell_1"],
                 "number_cell_2": info["number_cell_2"],
+                "train_test": str(self.mode),
             }
 
             self.list_data.append(data)
@@ -267,6 +288,10 @@ class PhysiCellModelWrapper(gym.Wrapper):
         no_generation_cfg=None,
         **kwargs,
     ):
+        if hasattr(self, "_next_mode"):
+            self.mode = self._next_mode
+            del self._next_mode
+
         if options is None:
             options = {}
 
