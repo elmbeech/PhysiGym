@@ -5,9 +5,8 @@ import random
 import time
 from copy import deepcopy
 from pathlib import Path
-import pickle
 
-
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.multiprocessing as mp
@@ -25,6 +24,7 @@ from nn_tip import Actor, QNetwork
 from rb_tip import ReplayBuffer
 
 
+from torch.multiprocessing import Event, Queue
 import queue
 
 
@@ -152,7 +152,10 @@ def actor_process(
         # Bookkeeping per-env
         episode_returns += rewards.astype(np.float64)
         local_step += num_envs - len(envs.dead_envs)
-
+        if local_step > d_arg["rl"]["full_data_timesteps"]:
+            envs.set_attr("generate_physicell_data", True)
+        if local_step > d_arg["rl"]["test_timesteps"]:
+            envs.set_attr("mode", "test")
         # Accumulate samples for this env step
         batch_samples = []
 
@@ -273,6 +276,7 @@ def run_async_sac(d_arg):
             actions_tensor, _, _ = actor.get_action(dummy_state)
         else:
             actions_tensor, _, _ = actor.get_action(dummy_state)
+
         _ = qf1(dummy_state, actions_tensor)
         _ = qf2(dummy_state, actions_tensor)
 
@@ -451,19 +455,8 @@ def run_async_sac(d_arg):
     except KeyboardInterrupt:
         print("Interrupted by user — shutting down.")
     finally:
-        stop_event.set()
-        # Save the learned actor policy
-        actor_save_path = os.path.join(d_arg["model"]["output_dir"], "actor_final.pth")
-        os.makedirs(d_arg["model"]["output_dir"], exist_ok=True)
-        torch.save(actor.state_dict(), actor_save_path)
-        print(f"Actor weights saved to {actor_save_path}")
-        os.makedirs(d_arg["model"]["output_dir"], exist_ok=True)
-        pickle_path = os.path.join(d_arg["model"]["output_dir"], "d_arg.pkl")
-        with open(pickle_path, "wb") as f:
-            pickle.dump(d_arg, f)
-        print(f"d_arg saved to {pickle_path}")
-
         # Ask actor process to stop, wait and terminate if necessary
+        stop_event.set()
         actor_proc.join(timeout=5.0)
         if actor_proc.is_alive():
             actor_proc.terminate()
@@ -496,13 +489,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--settingcells", default="config/cells.csv", help="Path to initial cell CSV"
     )
-    parser.add_argument("--seed", type=int, default=5, help="Random seed")
+    parser.add_argument("--seed", type=int, default=1, help="Random seed")
     parser.add_argument("--gpu", type=str, default="true", help="Use GPU? (true/false)")
 
     # === Observation & Neural Network ===
     parser.add_argument(
         "--observation_mode",
-        default="img_mc_cells_substrates",
+        default="transformer_nodes",
         help="Observation mode for RL agent",
     )
     parser.add_argument(
@@ -518,13 +511,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--learning_starts",
         type=int,
-        default=10000,
+        default=1e4,
         help="Steps before learning starts",
     )
     parser.add_argument(
         "--total_timesteps",
         type=int,
-        default=int(2e5),
+        default=int(4e5),
         help="Total timesteps for training",
     )
     parser.add_argument(
@@ -544,7 +537,9 @@ if __name__ == "__main__":
     )
 
     # === Experiment Metadata ===
-    parser.add_argument("--name", default="async_sac_tip", help="Experiment name")
+    parser.add_argument(
+        "--name", default="async_sac_tip_train_test", help="Experiment name"
+    )
     parser.add_argument(
         "--wandb", default="true", help="Log to Weights & Biases? (true/false)"
     )
@@ -563,6 +558,13 @@ if __name__ == "__main__":
         type=int,
         default=1,
         help="Frequency of saving simulation data",
+    )
+
+    parser.add_argument(
+        "--img_mc_grid_size",
+        type=int,
+        default=64,
+        help="grid size reduction",
     )
 
     args = parser.parse_args()
@@ -602,10 +604,10 @@ if __name__ == "__main__":
         "observation_mode": args.observation_mode,
         "render_mode": None,
         "verbose": False,
-        "img_rgb_grid_size_x": 64,
-        "img_rgb_grid_size_y": 64,
-        "img_mc_grid_size_x": 64,
-        "img_mc_grid_size_y": 64,
+        "img_rgb_grid_size_x": args.img_mc_grid_size,
+        "img_rgb_grid_size_y": args.img_mc_grid_size,
+        "img_mc_grid_size_x": args.img_mc_grid_size,
+        "img_mc_grid_size_y": args.img_mc_grid_size,
         "normalization_factor": args.tumor,
     }
 
@@ -631,6 +633,8 @@ if __name__ == "__main__":
         "policy_lr": 3e-4,
         "gamma": 0.99,
         "num_loops": 3,
+        "test_timesteps": int(3e5),
+        "full_data_timesteps": int(2.5e5),
     }
 
     d_arg_vect = {
@@ -656,6 +660,8 @@ if __name__ == "__main__":
         if args.cell_2_fraction is not None
         else [0.0, 0.25, 0.5, 0.75, 1.0],
         "seed": d_arg_simulation["seed"],
+        "mode_train": "network_field",
+        "mode_test": ["rectangle", "circular", "asymmetric", "connected"],
     }
     # === Final d_arg ===
     d_arg = {
