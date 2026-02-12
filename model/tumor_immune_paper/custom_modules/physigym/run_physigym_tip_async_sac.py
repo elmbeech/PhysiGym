@@ -86,6 +86,10 @@ def actor_process(
         # Model-side flag (not env-side)
         "is_graph": "graph" in d_arg["model"]["observation_mode"],
     }
+    full_data_train_timesteps = int(
+        d_arg["rl"]["percent_train_full_data_timesteps"]
+        * d_arg["rl"]["train_timesteps"]
+    )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
     actor_local = Actor(
         d_arg_env, d_arg.get("neural_architecture_image", "impala")
@@ -160,7 +164,7 @@ def actor_process(
             # Apply to ALL envs at once
             envs.env_method("set_mode_next_episode", pending_mode)
 
-        if local_step > d_arg["rl"]["full_data_timesteps"]:
+        if local_step > full_data_train_timesteps:
             envs.set_attr("generate_physicell_data", True)
         # Accumulate samples for this env step
         batch_samples = []
@@ -323,16 +327,15 @@ def run_async_sac(d_arg):
         )
 
     tau = d_arg["rl"]["tau"]
-    total = d_arg["rl"]["total_timesteps"]
+    train_total_timesteps = d_arg["rl"]["train_total_timesteps"]
 
     try:
         print("Starting training loop...")
-        train_timesteps = d_arg["rl"]["train_timesteps"]
-        pbar = tqdm(total=train_timesteps)
+        pbar = tqdm(total=train_total_timesteps)
 
         drained = 0
         grad_steps = 0
-        while drained < train_timesteps:
+        while drained < train_total_timesteps:
             pbar.update(drained - pbar.n)
             local_batch = []
 
@@ -460,16 +463,34 @@ def run_async_sac(d_arg):
                     # if actor queue full, skip this update (actor will pick up later)
                     pass
         print("Starting testing loop...")
-        train_timesteps = d_arg["rl"]["train_timesteps"]
-        pbar = tqdm(total=total)
+        test_timesteps = d_arg["rl"]["test_timesteps"]
+        pbar = tqdm(total=test_timesteps)
 
-        while drained < total:
+        while drained < test_timesteps:
             pbar.update(drained - pbar.n)
-            while not stats_queue.empty():
+            local_batch = []
+
+            while True:
                 try:
-                    stat = stats_queue.get_nowait()
+                    item = sample_queue.get_nowait()
                 except queue.Empty:
                     break
+
+                # item can be a single transition or a batch
+                if isinstance(item, list):
+                    local_batch.extend(item)
+                else:
+                    local_batch.append(item)
+
+                if local_batch:
+                    drained += len(local_batch)
+
+                # 2) Log any stats reported by actors
+                while not stats_queue.empty():
+                    try:
+                        stat = stats_queue.get_nowait()
+                    except queue.Empty:
+                        break
                 if stat["train_test"] == "test":
                     log_dict = {
                         "charts/test_return": stat["episode_return"],
@@ -477,7 +498,6 @@ def run_async_sac(d_arg):
                         "charts/test_timestamp": stat["timestamp"],
                         "charts/samples_drained": drained,
                     }
-
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict)
                 else:
@@ -550,9 +570,9 @@ if __name__ == "__main__":
         help="Steps before learning starts",
     )
     parser.add_argument(
-        "--total_timesteps",
+        "--train_total_timesteps",
         type=int,
-        default=int(4e5),
+        default=int(3e5),
         help="Total timesteps for training",
     )
     parser.add_argument(
@@ -655,7 +675,7 @@ if __name__ == "__main__":
     }
 
     d_arg_rl = {
-        "total_timesteps": args.total_timesteps,
+        "train_total_timesteps": args.train_total_timesteps,
         "buffer_size": args.buffer_size,
         "batch_size": args.batch_size_multiplier * args.num_envs,  # e.g. 64 × num_envs
         "learning_starts": args.learning_starts,
@@ -668,8 +688,8 @@ if __name__ == "__main__":
         "policy_lr": 3e-4,
         "gamma": 0.99,
         "num_loops": 3,
-        "train_timesteps": int(3e5),
-        "full_data_timesteps": int(2.5e5),
+        "test_timesteps": int(1e5),
+        "percent_train_full_data_timesteps": 0.75,
     }
 
     d_arg_vect = {
