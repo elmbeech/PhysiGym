@@ -53,7 +53,6 @@ def generate_balanced_fields(
     local_noise_level = local_noise_level / 100 + 0.05
 
     fields = {}
-    print(params)
     for key in params.keys():
         correlation_length = params[key]["correlation_length"]
         # === Génère un bruit local filtré ===
@@ -148,32 +147,27 @@ def asymmetric_mode(params, bounds, n_clusters=5):
     return pd.concat(tumors + [cell1])
 
 
-def connected_mode(params, bounds):
-    n_seeds = random.randint(5, 15)
-    seeds = np.random.uniform(bounds[0][0], bounds[0][1], (n_seeds, 2))
-    knn = NearestNeighbors(n_neighbors=n_seeds - 1).fit(seeds)
-    edges = knn.kneighbors(seeds, return_distance=False)[:, 1]
+def random_mode(params, bounds):
+    nb_tumor_cells = params["tumor"]["number_cells"]
+    nb_cell_1 = params["cell_1"]["number_cells"]
 
-    pts = []
-    for i, j in enumerate(edges):
-        xs = np.linspace(
-            seeds[i, 0], seeds[j, 0], params["tumor"]["number_cells"] // n_seeds
-        )
-        ys = np.linspace(
-            seeds[i, 1], seeds[j, 1], params["tumor"]["number_cells"] // n_seeds
-        )
-        pts.append(np.c_[xs, ys] + np.random.normal(0, 5, (len(xs), 2)))
+    tumor = df_cells(
+        np.random.uniform(
+            bounds[0][0],
+            bounds[0][1],
+            nb_tumor_cells,
+        ),
+        np.random.uniform(bounds[1][0], bounds[1][1], nb_tumor_cells),
+        "tumor",
+    )
 
-    tumor = np.vstack(pts)
-    tumor_df = df_cells(tumor[:, 0], tumor[:, 1], "tumor")
-
-    cell1_df = df_cells(
-        np.random.uniform(bounds[0][0], bounds[0][1], params["cell_1"]["number_cells"]),
-        np.random.uniform(bounds[1][0], bounds[1][1], params["cell_1"]["number_cells"]),
+    cell1 = df_cells(
+        np.random.uniform(bounds[0][0], bounds[0][1], nb_cell_1),
+        np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
         "cell_1",
     )
 
-    return pd.concat([tumor_df, cell1_df])
+    return pd.concat([tumor, cell1])
 
 
 def rectangle_mode(params, bounds):
@@ -298,9 +292,6 @@ def generate_initial_condition(
     elif mode == "asymmetric":
         df = asymmetric_mode(params, bounds)
 
-    elif mode == "connected":
-        df = connected_mode(params, bounds)
-
     elif mode == "rectangle":
         df = rectangle_mode(params, bounds)
 
@@ -344,10 +335,10 @@ if __name__ == "__main__":
     os.makedirs(out, exist_ok=True)
     x_min, x_max, y_min, y_max = -256, 256, -256, 256
 
-    modes = ["rectangle", "circular", "asymmetric", "connected", "network_field"]
+    modes = ["rectangle", "circular", "asymmetric", "network_field", "random"]
     params = {
-        "tumor": {"correlation_length": 45, "threshold": 0.55, "number_cells": 512},
-        "cell_1": {"correlation_length": 45, "threshold": 0.55, "number_cells": 128},
+        "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 512},
+        "cell_1": {"correlation_length": 35, "threshold": 0.55, "number_cells": 128},
     }
 
     d_arg_generation = {
