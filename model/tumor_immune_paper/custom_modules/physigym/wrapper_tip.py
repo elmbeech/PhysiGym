@@ -19,7 +19,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         w_cell=0.7,
         w_increase=0.2,
         w_amount=0.1,
-        frequency_save_data=64,
     ):
         """
         Wraps a PhysiCell environment to use a flat continuous Box action space.
@@ -80,7 +79,6 @@ class PhysiCellModelWrapper(gym.Wrapper):
         )
 
         os.makedirs(self.base_output_dir, exist_ok=True)
-        self.frequency_save_data = frequency_save_data
         self.list_data = []
         self.seed = int(
             self.env.get_wrapper_attr("x_root").xpath("//random_seed")[0].text
@@ -118,7 +116,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
 
     def save_data(self):
         run_idx = self.env.unwrapped.episode
-        if run_idx == -1 or self.frequency_save_data is None:
+        if run_idx == -1:
             return
         out_dir = self._episode_output_dir(run_idx)
 
@@ -136,20 +134,10 @@ class PhysiCellModelWrapper(gym.Wrapper):
         shutil.copy(self.csv_path_init, dst_path)
         self.list_data = []
         self.change_xml(
-            keys=[
-                "//save/folder",
-                "//save/full_data/enable",
-                "//save/SVG/enable",
-                "//save/full_data/interval",
-                "//save/SVG/interval",
-            ],
+            keys=["//save/folder", "//save/SVG/enable", "//save/SVG/interval"],
             elements=[
                 out_dir,
                 "true" if self.generate_physicell_data else "false",
-                "true" if self.generate_physicell_data else "false",
-                str(self.dt_gym)
-                if self.generate_physicell_data
-                else str(self.dt_gym * 4),
                 str(self.dt_gym)
                 if self.generate_physicell_data
                 else str(self.dt_gym * 4),
@@ -177,18 +165,17 @@ class PhysiCellModelWrapper(gym.Wrapper):
             - self.w_increase * drug_increase
         )
 
-        if self.frequency_save_data is not None:
-            data = {
-                "step": self.env.unwrapped.step_episode,
-                "reward": reward,
-                "mean_drugs": drug_t,
-                "number_tumor": info["number_tumor"],
-                "number_cell_1": info["number_cell_1"],
-                "number_cell_2": info["number_cell_2"],
-                "train_test": str(self.mode),
-            }
+        data = {
+            "step": self.env.unwrapped.step_episode,
+            "reward": reward,
+            "mean_drugs": drug_t,
+            "number_tumor": info["number_tumor"],
+            "number_cell_1": info["number_cell_1"],
+            "number_cell_2": info["number_cell_2"],
+            "train_test": str(self.mode),
+        }
 
-            self.list_data.append(data)
+        self.list_data.append(data)
 
         return obs, reward, terminated, truncated, info
 

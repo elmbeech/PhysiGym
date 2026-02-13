@@ -497,22 +497,19 @@ def run_async_sac(d_arg):
                     break
 
                 # Only log test episodes
-                if stat.get("train_test") != "test":
-                    continue
+                if stat["train_test"] == "test":
+                    log_dict = {
+                        "charts/test_return": stat["episode_return"],
+                        "charts/test_length": stat["episode_length"],
+                        "charts/test_timestamp": stat["timestamp"],
+                        "charts/test_steps": test_drained,
+                    }
 
-                log_dict = {
-                    "charts/test_return": stat["episode_return"],
-                    "charts/test_length": stat["episode_length"],
-                    "charts/test_timestamp": stat["timestamp"],
-                    "charts/test_steps": test_drained,
-                }
-
-                if d_arg["simulation"]["wandb_track"]:
-                    wandb.log(log_dict, step=test_drained)
-                else:
-                    for tag, value in log_dict.items():
-                        writer.add_scalar(tag, value, test_drained)
-
+                    if d_arg["simulation"]["wandb_track"]:
+                        wandb.log(log_dict, step=test_drained)
+                    else:
+                        for tag, value in log_dict.items():
+                            writer.add_scalar(tag, value, test_drained)
             # small sleep to avoid busy-waiting
             time.sleep(0.05)
 
@@ -726,7 +723,7 @@ if __name__ == "__main__":
         else [0.0, 0.25, 0.5, 0.75, 1.0],
         "seed": d_arg_simulation["seed"],
         "mode_train": "network_field",
-        "mode_test": ["rectangle", "circular", "asymmetric", "connected"],
+        "mode_test": ["rectangle", "circular", "asymmetric"],
     }
     # === Final d_arg ===
     d_arg = {

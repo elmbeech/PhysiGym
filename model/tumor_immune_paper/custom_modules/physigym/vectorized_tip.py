@@ -271,7 +271,6 @@ if __name__ == "__main__":
             "w_cell": 0.7,
             "w_increase": 0.2,
             "w_amount": 0.1,
-            "frequency_save_data": True,
         },
         "generation": {
             "x_min": -256,
