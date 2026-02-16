@@ -158,6 +158,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         drug_increase = max(0.0, drug_t - drug_prev)
         self.info["prev_mean_drugs"] = drug_t
         info["step_episode"] = self.env.unwrapped.step_episode
+        info["train_test"] = str(self.mode)
 
         reward = (
             self.w_cell * r_cancer_cells
@@ -172,7 +173,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
             "number_tumor": info["number_tumor"],
             "number_cell_1": info["number_cell_1"],
             "number_cell_2": info["number_cell_2"],
-            "train_test": str(self.mode),
+            "train_test": info["train_test"],
         }
 
         self.list_data.append(data)

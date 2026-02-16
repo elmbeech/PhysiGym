@@ -196,6 +196,7 @@ def actor_process(
                             "episode_length": int(info["step_episode"]),
                             "step": int(local_step),
                             "timestamp": time.time() - begin_time,
+                            "train_test": info["train_test"],
                         }
                     )
                 except queue.Full:
@@ -502,11 +503,11 @@ def run_async_sac(d_arg):
                         "charts/test_return": stat["episode_return"],
                         "charts/test_length": stat["episode_length"],
                         "charts/test_timestamp": stat["timestamp"],
-                        "charts/test_steps": test_drained,
+                        "charts/test_step": stat["step"] - drained,
                     }
 
                     if d_arg["simulation"]["wandb_track"]:
-                        wandb.log(log_dict, step=test_drained)
+                        wandb.log(log_dict, step=test_drained + drained)
                     else:
                         for tag, value in log_dict.items():
                             writer.add_scalar(tag, value, test_drained)
@@ -579,7 +580,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train_total_timesteps",
         type=int,
-        default=int(3e5),
+        default=int(4e5),
         help="Total timesteps for training",
     )
     parser.add_argument(
@@ -615,12 +616,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cell_2_fraction", type=float, default=None, help="Fraction of cell type 2"
     )
-    parser.add_argument(
-        "--s_frequency_save_data",
-        type=int,
-        default=1,
-        help="Frequency of saving simulation data",
-    )
 
     parser.add_argument(
         "--img_mc_grid_size",
@@ -646,7 +641,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TIP",
+        "project": "SAC_ASYNC_TRAIN_TEST_TIP",
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,
@@ -678,7 +673,6 @@ if __name__ == "__main__":
         "w_cell": 0.7,
         "w_increase": 0.2,
         "w_amount": 0.1,
-        "frequency_save_data": args.s_frequency_save_data,
     }
 
     d_arg_rl = {
