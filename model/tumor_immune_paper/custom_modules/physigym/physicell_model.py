@@ -29,6 +29,8 @@ from physigym.envs.physicell_core import CorePhysiCellEnv
 import skimage as ski
 from tysserand import tysserand as ty
 from sklearn.cluster import KMeans
+import cv2
+
 
 FIBO = np.array([1, 2, 3, 5, 7, 13, 21, 34, 55])
 LENGTH_FIBO = len(FIBO)
@@ -103,7 +105,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 "iqr": lambda x: np.percentile(x, 75) - np.percentile(x, 25),
                 "mad": lambda x: np.median(np.abs(x - np.median(x))),
             }
-            if name not in self.reducers:
+            try:
+                self.reducers = self.reducers[name]
+            except:
                 raise ValueError(f"Error: unknown reducers: {name}")
         if "img" in observation_mode:
             self.observation_mode = (
@@ -210,7 +214,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             o_observation_space = spaces.Box(
                 low=-(2**8),
                 high=2**8,
-                shape=(self.cell_type_count,),
+                shape=(self.cell_type_count * 2,),
                 dtype=np.float32,
             )
 
@@ -226,7 +230,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             o_observation_space = spaces.Box(
                 low=-(2**8),
                 high=2**8,
-                shape=(self.cell_type_count + self.substrate_count,),
+                shape=(self.cell_type_count * 2 + self.substrate_count,),
                 dtype=np.float32,
             )
 
@@ -246,7 +250,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     low=0,
                     high=255,
                     shape=(
-                        self.cell_type_count,
+                        self.cell_type_count * 2,
                         self.kwargs["img_mc_grid_size_x"],
                         self.kwargs["img_mc_grid_size_y"],
                     ),
@@ -271,7 +275,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     low=0,
                     high=255,
                     shape=(
-                        self.cell_type_count + self.substrate_count,
+                        self.cell_type_count + self.substrate_count + 1,
                         self.kwargs["img_mc_grid_size_x"],
                         self.kwargs["img_mc_grid_size_y"],
                     ),
@@ -330,16 +334,27 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         return o_observation_space
 
     def get_cells_scalars(self):
-        a_norm_cell_count = np.zeros((self.cell_type_count,), dtype=np.float32)
+        # Initialize the array for both alive and dead counts
+        n_types = self.cell_type_count
+        a_norm_cell_count = np.zeros((n_types * 2,), dtype=np.float32)
+        norm_factor = self.kwargs["normalization_factor"]
+
         for s_cell_type, i_id in self.cell_type_to_id.items():
+            # Store alive counts in the first half: [0 to n_types-1]
             a_norm_cell_count[i_id] = (
-                self.df_alive.loc[
-                    (self.df_alive.type == s_cell_type),
-                    :,
-                ].shape[0]
-                / self.kwargs["normalization_factor"]
+                self.df_alive.loc[self.df_alive.type == s_cell_type].shape[0]
+                / norm_factor
                 - 1
             )
+
+            # Store dead counts in the second half: [n_types to 2*n_types-1]
+            # We add n_types to the index to avoid overwriting
+            a_norm_cell_count[i_id + n_types] = (
+                self.df_dead.loc[self.df_dead.type == s_cell_type].shape[0]
+                / norm_factor
+                - 1
+            )
+
         return a_norm_cell_count
 
     def get_substrates_scalars(self):
@@ -352,18 +367,16 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         return a_substrate
 
-    def get_img_cells(self):
-        # get cell_type indices
-        cell_type_indices = self.df_alive["type"].map(self.cell_type_to_id).to_numpy()
-
+    def get_img(self, df):
+        cell_type_indices = df["type"].map(self.cell_type_to_id).to_numpy()
         # discretize
         x_bin = (
-            (self.df_alive["x"] - self.x_min)
+            (df["x"] - self.x_min)
             / (self.x_max - self.x_min)
             * (self.kwargs["img_mc_grid_size_x"] - 1)
         ).astype(int)
         y_bin = (
-            (self.df_alive["y"] - self.y_min)
+            (df["y"] - self.y_min)
             / (self.y_max - self.y_min)
             * (self.kwargs["img_mc_grid_size_y"] - 1)
         ).astype(int)
@@ -390,6 +403,12 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         return ski.util.img_as_ubyte(
             image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
         )
+
+    def get_img_dead_cells(self):
+        return self.get_img(self.df_dead)
+
+    def get_img_cells(self):
+        return self.get_img(self.df_alive)
 
     def get_img_substrates(self):
         self.df_subs = None
@@ -466,6 +485,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         self.df_cell = pd.DataFrame(
             physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "type"]
         )
+        self.df_dead = self.df_cell[self.df_cell["dead"] >= 0.1]
         self.df_alive = self.df_cell[self.df_cell["dead"] < 0.1]
 
         # update tumor cell count
@@ -494,7 +514,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             self.observation_mode
             == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
         ):
-            o_observation = self.get_img_cells()
+            o_observation = np.concatenate(
+                [self.get_img_cells(), self.get_img_dead_cells()]
+            )
         elif (
             self.observation_mode
             == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
@@ -505,7 +527,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             == f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
         ):
             o_observation = np.concatenate(
-                [self.get_img_cells(), self.get_img_substrates()]
+                [
+                    self.get_img_cells(),
+                    self.get_img_dead_cells(),
+                    self.get_img_substrates(),
+                ]
             )
 
         elif self.observation_mode in ["graph_delaunay", "graph_knn"]:
@@ -1007,3 +1033,81 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             f"{s_path}timeseries_step{str(self.step_env).zfill(3)}.jpeg",
             facecolor="white",
         )
+
+    def save_fig(self, action_value: float):
+        """
+        Fast rendering of cells + action bar using OpenCV (no matplotlib).
+        Saves a JPEG frame ready for video creation.
+        """
+
+        # Canvas settings
+        canvas_width, canvas_height = 800, 800
+        canvas = (
+            np.ones((canvas_height, canvas_width, 3), dtype=np.uint8) * 255
+        )  # white background
+
+        # Scale cell coordinates to canvas
+        df_cell = self.df_alive.copy()
+        df_cell = df_cell[df_cell.z == 0.0]  # only z=0
+
+        x_scaled = (
+            (df_cell["x"] - self.x_min)
+            / (self.x_max - self.x_min)
+            * (canvas_width - 100)
+        ).astype(int)
+        y_scaled = (
+            (df_cell["y"] - self.y_min)
+            / (self.y_max - self.y_min)
+            * (canvas_height - 20)
+        ).astype(int)
+
+        # Draw cells
+        for x, y, cell_type in zip(x_scaled, y_scaled, df_cell["type"]):
+            color = self.cell_type_to_color[cell_type]
+            # Convert RGB [0,1] to BGR [0,255] for OpenCV
+            if isinstance(color, (tuple, list)):
+                bgr = tuple(int(255 * val) for val in reversed(color))
+            else:
+                bgr = (0, 0, 255)  # default red
+            cv2.circle(
+                canvas, (x, canvas_height - 1 - y), 3, bgr, -1
+            )  # invert y for OpenCV coords
+
+        # Draw action bar
+        action_space = self.get_action_space()["drug_1"]
+        action_min, action_max = float(action_space.low[0]), float(action_space.high[0])
+        action_scaled = int(
+            ((action_value - action_min) / (action_max - action_min)) * canvas_height
+        )
+        action_scaled = np.clip(action_scaled, 0, canvas_height)
+
+        bar_x_start = canvas_width - 50
+        bar_width = 20
+        cv2.rectangle(
+            canvas,
+            (bar_x_start, canvas_height - action_scaled),
+            (bar_x_start + bar_width, canvas_height),
+            (0, 0, 255),
+            -1,
+        )
+
+        # Optional: write action value text
+        font_scale = 0.5
+        cv2.putText(
+            canvas,
+            f"{action_value:.2f}",
+            (bar_x_start + bar_width + 5, canvas_height - action_scaled // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            1,
+            cv2.LINE_AA,
+        )
+
+        # Save JPEG frame
+        s_path = os.path.join(
+            self.x_root.xpath("//save/folder")[0].text, "render_mode_human"
+        )
+        os.makedirs(s_path, exist_ok=True)
+        filename = f"{s_path}/timeseries_step{str(self.step_env).zfill(3)}.jpeg"
+        cv2.imwrite(filename, canvas)
