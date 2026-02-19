@@ -367,7 +367,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         return a_substrate
 
-    def get_img(self, df):
+    def get_matrix(self, df):
         cell_type_indices = df["type"].map(self.cell_type_to_id).to_numpy()
         # discretize
         x_bin = (
@@ -404,13 +404,15 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             image / (self.ratio_img_mc_size_x * self.ratio_img_mc_size_y)
         )
 
-    def get_img_dead_cells(self):
-        return self.get_img(self.df_dead)
+    def get_matrix_dead_cells(self):
+        df = self.df_dead
+        return self.get_matrix(df=df)
 
-    def get_img_cells(self):
-        return self.get_img(self.df_alive)
+    def get_matrix_cells(self):
+        df = self.df_alive
+        return self.get_matrix(df=df)
 
-    def get_img_substrates(self):
+    def get_matrix_substrates(self):
         self.df_subs = None
         for s_subs in self.substrate_unique:
             df_subs = pd.DataFrame(
@@ -515,22 +517,22 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
         ):
             o_observation = np.concatenate(
-                [self.get_img_cells(), self.get_img_dead_cells()]
+                [self.get_matrix_cells(), self.get_matrix_dead_cells()]
             )
         elif (
             self.observation_mode
             == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
         ):
-            o_observation = self.get_img_substrates()
+            o_observation = self.get_matrix_substrates()
         elif (
             self.observation_mode
             == f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
         ):
             o_observation = np.concatenate(
                 [
-                    self.get_img_cells(),
-                    self.get_img_dead_cells(),
-                    self.get_img_substrates(),
+                    self.get_matrix_cells(),
+                    self.get_matrix_dead_cells(),
+                    self.get_matrix_substrates(),
                 ]
             )
 
