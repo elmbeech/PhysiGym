@@ -7,8 +7,6 @@ import shutil
 from multiprocessing import Pool, cpu_count
 import re
 
-BASE_DIR = Path("/home/alex/Physi/PhysiCell/data")
-
 # Check converter
 if shutil.which("rsvg-convert"):
     converter = "rsvg-convert"
@@ -111,4 +109,5 @@ def main():
 
 
 if __name__ == "__main__":
+    BASE_DIR = Path("/home/alex/Physi/PhysiCell/data")
     main()
