@@ -345,6 +345,5 @@ if __name__ == "__main__":
         "tumor": {"correlation_length": 35, "threshold": 0.02*i, "number_cells": 512},
         "cell_1": {"correlation_length": 35, "threshold": 0.02*i, "number_cells": 128},
     }
-        print(0.02*i)
         df, mode = generate_initial_condition(**d_arg_generation)
         plot_cells(df, f"{out}/cells_{i*0.02}.png")
