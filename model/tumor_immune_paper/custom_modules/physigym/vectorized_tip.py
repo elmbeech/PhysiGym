@@ -25,7 +25,7 @@ from tqdm import tqdm
 import multiprocessing as mp
 
 from resilient_sub_vec_env import ResilientSubprocVecEnv
-from new_wrapper_tip import PhysiCellModelWrapper
+from wrapper_tip import PhysiCellModelWrapper
 import sys
 import faulthandler
 

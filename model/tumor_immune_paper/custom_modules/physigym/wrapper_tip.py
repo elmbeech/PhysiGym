@@ -73,6 +73,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         self.no_generation_cfg = None
         self.generate_physicell_data = False
         self.mode = "train"  # "train" | "test"
+        self.type_mode = None
         self.dataset_name = "default"
         self.base_output_dir = (
             self.env.get_wrapper_attr("x_root").xpath("//save/folder")[0].text
@@ -157,6 +158,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         info["action"] = d_action
         drug_increase = max(0.0, drug_t - drug_prev)
         self.info["prev_mean_drugs"] = drug_t
+        self.info["type_mode"] = self.type_mode
         info["step_episode"] = self.env.unwrapped.step_episode
         info["train_test"] = str(self.mode)
 
@@ -235,7 +237,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         # 4. Generate + activate
         # --------------------------------------------------
         gen_cfg["seed"] += episode
-        generate_initial_condition(**gen_cfg)
+        _, self.type_mode = generate_initial_condition(**gen_cfg)
         self.update_cell_path_cell_folder(csv_path)
 
     def update_cell_path_cell_folder(self, path_cells_csv: str):
