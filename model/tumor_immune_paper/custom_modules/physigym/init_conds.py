@@ -125,28 +125,6 @@ def circular_mode(params, bounds):
     return pd.concat([df_cells(tx, ty, "tumor"), df_cells(cx1, cy1, "cell_1")])
 
 
-def asymmetric_mode(params, bounds, n_clusters=5):
-    tumors = []
-    per_cluster = params["tumor"]["number_cells"] // n_clusters
-    centers = np.random.uniform(
-        [bounds[0][0], bounds[1][0]], [bounds[0][1], bounds[1][1]], size=(n_clusters, 2)
-    )
-
-    for cx, cy in centers:
-        r1, r2 = np.random.uniform(20, 50), np.random.uniform(15, 40)
-        angle = np.random.uniform(0, 2 * np.pi)
-        x, y = ellipse_points(per_cluster, r1, r2, (cx, cy), angle, jitter=5)
-        tumors.append(df_cells(x, y, "tumor"))
-
-    cell1 = df_cells(
-        np.random.uniform(bounds[0][0], bounds[0][1], params["cell_1"]["number_cells"]),
-        np.random.uniform(bounds[1][0], bounds[1][1], params["cell_1"]["number_cells"]),
-        "cell_1",
-    )
-
-    return pd.concat(tumors + [cell1])
-
-
 def random_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
     nb_cell_1 = params["cell_1"]["number_cells"]
@@ -162,19 +140,21 @@ def random_mode(params, bounds):
     )
 
     cell1 = df_cells(
-        np.random.uniform(bounds[0][0], bounds[0][1], nb_cell_1),
+        np.random.uniform(
+            bounds[0][0], bounds[0][1], nb_cell_1
+        ),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
         "cell_1",
     )
+        
 
     return pd.concat([tumor, cell1])
-
 
 def rectangle_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
     nb_cell_1 = params["cell_1"]["number_cells"]
-    value_tumor = random.uniform(0.2, 0.4)
-    value_cell_1 = random.uniform(0.7, 0.9)
+    value_tumor = random.uniform(0.2,0.4)
+    value_cell_1 = random.uniform(0.7,0.9)
 
     tumor = df_cells(
         np.random.uniform(
@@ -187,10 +167,13 @@ def rectangle_mode(params, bounds):
     )
 
     cell1 = df_cells(
-        np.random.uniform(bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1),
+        np.random.uniform(
+            bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1
+        ),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
         "cell_1",
     )
+        
 
     return pd.concat([tumor, cell1])
 
@@ -285,15 +268,16 @@ def generate_initial_condition(
             r2_c=random.uniform(0.2, 0.6),
             jit_t=random.randint(5, 15),
             jit_c=random.randint(5, 10),
+            
         )
         params_1 |= params
         df = circular_mode(params_1, bounds)
 
-    elif mode == "asymmetric":
-        df = asymmetric_mode(params, bounds)
-
     elif mode == "rectangle":
         df = rectangle_mode(params, bounds)
+    
+    elif mode == "random":
+        df = random_mode(params, bounds)
 
     elif mode == "network_field":
         df = generate_synthetic_network_field(params, bounds)
@@ -310,7 +294,7 @@ def generate_initial_condition(
     ] = "cell_2"
     df = df.drop_duplicates(subset=["x", "y"], keep=False)
     df.to_csv(csv_path, index=False, float_format="%.6f")
-    return df
+    return df, mode
 
 
 def plot_cells(df, path):
@@ -331,11 +315,11 @@ def plot_cells(df, path):
 # ============================================================
 
 if __name__ == "__main__":
-    out = "configs"
+    out = "configs_network_field"
     os.makedirs(out, exist_ok=True)
     x_min, x_max, y_min, y_max = -256, 256, -256, 256
 
-    modes = ["rectangle", "circular", "asymmetric", "network_field", "random"]
+    modes = ["network_field"]
     params = {
         "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 512},
         "cell_1": {"correlation_length": 35, "threshold": 0.55, "number_cells": 128},
@@ -353,10 +337,14 @@ if __name__ == "__main__":
         "mode": None,
     }
     seed = 42
-    for i in range(20):
-        mode = random.choice(modes)
-        d_arg_generation["csv_path"] = f"{out}/cells_{i}.csv"
-        d_arg_generation["seed"] = seed + i
-        d_arg_generation["mode"] = mode
-        df = generate_initial_condition(**d_arg_generation)
-        plot_cells(df, f"{out}/cells_{i}.png")
+    for i in range(1,48):
+        d_arg_generation["csv_path"] = f"{out}/cells_{i}.png"
+        d_arg_generation["seed"] = seed
+        d_arg_generation["mode"] = "network_field"
+        d_arg_generation["params"] = {
+        "tumor": {"correlation_length": 35, "threshold": 0.02*i, "number_cells": 512},
+        "cell_1": {"correlation_length": 35, "threshold": 0.02*i, "number_cells": 128},
+    }
+        print(0.02*i)
+        df, mode = generate_initial_condition(**d_arg_generation)
+        plot_cells(df, f"{out}/cells_{i*0.02}.png")
