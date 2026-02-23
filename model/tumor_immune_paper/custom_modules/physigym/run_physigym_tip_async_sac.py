@@ -197,6 +197,7 @@ def actor_process(
                             "step": int(local_step),
                             "timestamp": time.time() - begin_time,
                             "train_test": info["train_test"],
+                            "type_mode": info["type_mode"],
                         }
                     )
                 except queue.Full:
@@ -499,11 +500,12 @@ def run_async_sac(d_arg):
 
                 # Only log test episodes
                 if stat["train_test"] == "test":
+                    type_mode = stat["type_mode"]
                     log_dict = {
-                        "charts/test_return": stat["episode_return"],
-                        "charts/test_length": stat["episode_length"],
-                        "charts/test_timestamp": stat["timestamp"],
-                        "charts/test_step": stat["step"] - drained,
+                        f"charts/test_{type_mode}_return": stat["episode_return"],
+                        f"charts/test_{type_mode}_length": stat["episode_length"],
+                        f"charts/test_{type_mode}_timestamp": stat["timestamp"],
+                        f"charts/test_{type_mode}_step": stat["step"] - drained,
                     }
 
                     if d_arg["simulation"]["wandb_track"]:
@@ -580,17 +582,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train_total_timesteps",
         type=int,
-        default=int(4e5),
+        default=int(3e5),
         help="Total timesteps for training",
     )
     parser.add_argument(
-        "--rl_threads", type=int, default=5, help="Number of RL threads"
+        "--rl_threads", type=int, default=4, help="Number of RL threads"
     )
     parser.add_argument(
-        "--num_envs", type=int, default=9, help="Parallel PhysiCell instances"
+        "--num_envs", type=int, default=14, help="Parallel PhysiCell instances"
     )
     parser.add_argument(
-        "--buffer_size", type=int, default=int(2e5), help="Replay buffer size"
+        "--buffer_size", type=int, default=int(3e5), help="Replay buffer size"
     )
     parser.add_argument(
         "--batch_size_multiplier",
@@ -689,8 +691,8 @@ if __name__ == "__main__":
         "policy_lr": 3e-4,
         "gamma": 0.99,
         "num_loops": 3,
-        "test_timesteps": int(1e5),
-        "percent_train_full_data_timesteps": 0.75,
+        "test_timesteps": int(2e5),
+        "percent_train_full_data_timesteps": 0.99,
     }
 
     d_arg_vect = {
@@ -717,7 +719,7 @@ if __name__ == "__main__":
         else [0.0, 0.25, 0.5, 0.75, 1.0],
         "seed": d_arg_simulation["seed"],
         "mode_train": "network_field",
-        "mode_test": ["rectangle", "circular", "asymmetric"],
+        "mode_test": ["rectangle", "circular", "random", "network_field"],
     }
     # === Final d_arg ===
     d_arg = {

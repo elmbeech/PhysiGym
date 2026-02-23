@@ -254,8 +254,8 @@ def generate_initial_condition(
     set_seed(seed)
     bounds = ((x_min, x_max), (y_min, y_max))
     if isinstance(mode, (list, tuple)):
-        type_mode = random.choice(mode)
-    if type_mode == "circular":
+        mode = random.choice(mode)
+    if mode == "circular":
         params_1 = dict(
             r1=random.uniform(0.1, 0.4),
             r2_t=random.uniform(0.1, 0.4),
@@ -267,17 +267,17 @@ def generate_initial_condition(
         params_1 |= params
         df = circular_mode(params_1, bounds)
 
-    elif type_mode == "rectangle":
+    elif mode == "rectangle":
         df = rectangle_mode(params, bounds)
 
-    elif type_mode == "random":
+    elif mode == "random":
         df = random_mode(params, bounds)
 
-    elif type_mode == "network_field":
+    elif mode == "network_field":
         df = generate_synthetic_network_field(params, bounds)
 
     else:
-        raise ValueError(type_mode)
+        raise ValueError(mode)
 
     cell1_pos = np.flatnonzero(df["type"].values == "cell_1")
     df.iloc[
@@ -288,7 +288,7 @@ def generate_initial_condition(
     ] = "cell_2"
     df = df.drop_duplicates(subset=["x", "y"], keep=False)
     df.to_csv(csv_path, index=False, float_format="%.6f")
-    return df, type_mode
+    return df, mode
 
 
 def plot_cells(df, path):
@@ -347,6 +347,5 @@ if __name__ == "__main__":
                 "number_cells": 128,
             },
         }
-        print(0.02 * i)
         df, type_mode = generate_initial_condition(**d_arg_generation)
         plot_cells(df, f"{out}/cells_{i * 0.02}.png")
