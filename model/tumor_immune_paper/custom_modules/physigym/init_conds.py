@@ -140,21 +140,19 @@ def random_mode(params, bounds):
     )
 
     cell1 = df_cells(
-        np.random.uniform(
-            bounds[0][0], bounds[0][1], nb_cell_1
-        ),
+        np.random.uniform(bounds[0][0], bounds[0][1], nb_cell_1),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
         "cell_1",
     )
-        
 
     return pd.concat([tumor, cell1])
+
 
 def rectangle_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
     nb_cell_1 = params["cell_1"]["number_cells"]
-    value_tumor = random.uniform(0.2,0.4)
-    value_cell_1 = random.uniform(0.7,0.9)
+    value_tumor = random.uniform(0.2, 0.4)
+    value_cell_1 = random.uniform(0.7, 0.9)
 
     tumor = df_cells(
         np.random.uniform(
@@ -167,13 +165,10 @@ def rectangle_mode(params, bounds):
     )
 
     cell1 = df_cells(
-        np.random.uniform(
-            bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1
-        ),
+        np.random.uniform(bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
         "cell_1",
     )
-        
 
     return pd.concat([tumor, cell1])
 
@@ -259,8 +254,8 @@ def generate_initial_condition(
     set_seed(seed)
     bounds = ((x_min, x_max), (y_min, y_max))
     if isinstance(mode, (list, tuple)):
-        mode = random.choice(mode)
-    if mode == "circular":
+        type_mode = random.choice(mode)
+    if type_mode == "circular":
         params_1 = dict(
             r1=random.uniform(0.1, 0.4),
             r2_t=random.uniform(0.1, 0.4),
@@ -268,22 +263,21 @@ def generate_initial_condition(
             r2_c=random.uniform(0.2, 0.6),
             jit_t=random.randint(5, 15),
             jit_c=random.randint(5, 10),
-            
         )
         params_1 |= params
         df = circular_mode(params_1, bounds)
 
-    elif mode == "rectangle":
+    elif type_mode == "rectangle":
         df = rectangle_mode(params, bounds)
-    
-    elif mode == "random":
+
+    elif type_mode == "random":
         df = random_mode(params, bounds)
 
-    elif mode == "network_field":
+    elif type_mode == "network_field":
         df = generate_synthetic_network_field(params, bounds)
 
     else:
-        raise ValueError(mode)
+        raise ValueError(type_mode)
 
     cell1_pos = np.flatnonzero(df["type"].values == "cell_1")
     df.iloc[
@@ -294,7 +288,7 @@ def generate_initial_condition(
     ] = "cell_2"
     df = df.drop_duplicates(subset=["x", "y"], keep=False)
     df.to_csv(csv_path, index=False, float_format="%.6f")
-    return df, mode
+    return df, type_mode
 
 
 def plot_cells(df, path):
@@ -337,13 +331,22 @@ if __name__ == "__main__":
         "mode": None,
     }
     seed = 42
-    for i in range(1,48):
+    for i in range(1, 48):
         d_arg_generation["csv_path"] = f"{out}/cells_{i}.png"
         d_arg_generation["seed"] = seed
         d_arg_generation["mode"] = "network_field"
         d_arg_generation["params"] = {
-        "tumor": {"correlation_length": 35, "threshold": 0.02*i, "number_cells": 512},
-        "cell_1": {"correlation_length": 35, "threshold": 0.02*i, "number_cells": 128},
-    }
-        df, mode = generate_initial_condition(**d_arg_generation)
-        plot_cells(df, f"{out}/cells_{i*0.02}.png")
+            "tumor": {
+                "correlation_length": 35,
+                "threshold": 0.02 * i,
+                "number_cells": 512,
+            },
+            "cell_1": {
+                "correlation_length": 35,
+                "threshold": 0.02 * i,
+                "number_cells": 128,
+            },
+        }
+        print(0.02 * i)
+        df, type_mode = generate_initial_condition(**d_arg_generation)
+        plot_cells(df, f"{out}/cells_{i * 0.02}.png")
