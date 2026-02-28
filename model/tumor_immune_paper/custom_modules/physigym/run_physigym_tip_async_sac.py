@@ -20,9 +20,8 @@ from tqdm import tqdm
 
 # Your project imports
 from vectorized_tip import vec_envs
-from nn_tip import Actor, QNetwork
+from nn_tip import Actor, QNetwork, FeatureExtractor
 from rb_tip import ReplayBuffer
-
 
 from torch.multiprocessing import Event, Queue
 import queue
@@ -91,9 +90,11 @@ def actor_process(
         * d_arg["rl"]["train_total_timesteps"]
     )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-    actor_local = Actor(
-        d_arg_env, d_arg.get("neural_architecture_image", "impala")
+    encoder = FeatureExtractor(
+        cfg=d_arg_env,
+        neural_architecture_image=d_arg.get("neural_architecture_image", "impala"),
     ).cpu()
+    actor_local = Actor(d_arg_env, encoder).cpu()
     if d_arg_env["is_graph"]:
         obs_nn = obs_to_pyg(obs, "cpu")
     else:
@@ -265,10 +266,12 @@ def run_async_sac(d_arg):
         state_type=d_arg_env["observation_space_dtype"],
         is_graph=d_arg_env["is_graph"],
     )
-
-    actor = Actor(d_arg_env, d_arg["neural_architecture_image"]).to(device)
-    qf1 = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
-    qf2 = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
+    encoder = FeatureExtractor(
+        cfg=d_arg_env, neural_architecture_image=d_arg["neural_architecture_image"]
+    )
+    actor = Actor(d_arg_env, encoder).to(device)
+    qf1 = QNetwork(encoder).to(device)
+    qf2 = QNetwork(encoder).to(device)
     # Networks
     if d_arg_env["is_graph"]:
         dummy_graph = Data(
@@ -283,15 +286,16 @@ def run_async_sac(d_arg):
             device=device,
             dtype=torch.float32,
         )
+    dummy_state_encoded = encoder(dummy_state)
 
     with torch.no_grad():
         if d_arg_env["is_graph"]:
-            actions_tensor, _, _ = actor.get_action(dummy_state)
+            actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
         else:
-            actions_tensor, _, _ = actor.get_action(dummy_state)
+            actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
 
-        _ = qf1(dummy_state, actions_tensor)
-        _ = qf2(dummy_state, actions_tensor)
+        _ = qf1(dummy_state_encoded, actions_tensor)
+        _ = qf2(dummy_state_encoded, actions_tensor)
 
     qf1_target = deepcopy(qf1).to(device)
     qf2_target = deepcopy(qf2).to(device)
@@ -393,11 +397,19 @@ def run_async_sac(d_arg):
                 action = batch["action"]
                 done = batch["done"]
                 reward = batch["reward"]
-                # compute targets
+
+                # ---------- Encode once ----------
+                z = qf1.encoder(state)
                 with torch.no_grad():
-                    next_actions, next_log_pi, _ = actor.get_action(next_state)
-                    q1_next = qf1_target(next_state, next_actions)
-                    q2_next = qf2_target(next_state, next_actions)
+                    z_next = qf1_target.encoder(next_state)
+
+                # ---------- Target Q ----------
+                with torch.no_grad():
+                    next_actions, next_log_pi, _ = actor.get_action(z_next)
+
+                    q1_next = qf1_target(z_next, next_actions)
+                    q2_next = qf2_target(z_next, next_actions)
+
                     min_q_next = torch.min(q1_next, q2_next) - alpha * next_log_pi
                     next_q = (
                         reward.flatten()
@@ -406,23 +418,25 @@ def run_async_sac(d_arg):
                         * min_q_next.squeeze()
                     )
 
-                q1 = qf1(state, action).view(-1)
-                q2 = qf2(state, action).view(-1)
-                qf1_loss = F.mse_loss(q1, next_q)
-                qf2_loss = F.mse_loss(q2, next_q)
-                qf_loss = qf1_loss + qf2_loss
+                # ---------- Critic ----------
+                q1 = qf1(z, action).view(-1)
+                q2 = qf2(z, action).view(-1)
+
+                qf_loss = F.mse_loss(q1, next_q) + F.mse_loss(q2, next_q)
 
                 q_optimizer.zero_grad()
                 qf_loss.backward()
                 q_optimizer.step()
+
                 grad_steps += 1
 
                 # Policy & alpha update
                 if grad_steps % d_arg["rl"]["policy_frequency"] == 0:
+                    z_detached = z.detach()
                     for _ in range(d_arg["rl"]["policy_frequency"]):
                         actions, log_pi, _ = actor.get_action(state)
-                        q1_pi = qf1(state, actions)
-                        q2_pi = qf2(state, actions)
+                        q1_pi = qf1(z_detached, actions)
+                        q2_pi = qf2(z_detached, actions)
                         min_q_pi = torch.min(q1_pi, q2_pi)
                         actor_loss = (alpha * log_pi - min_q_pi).mean()
 
