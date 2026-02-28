@@ -304,7 +304,10 @@ def run_async_sac(d_arg):
         list(qf1.parameters()) + list(qf2.parameters()),
         lr=d_arg["rl"]["q_lr"],
     )
-    actor_optimizer = optim.Adam(actor.parameters(), lr=d_arg["rl"]["policy_lr"])
+    actor_params = [
+        p for n, p in actor.named_parameters() if not n.startswith("encoder")
+    ]
+    actor_optimizer = optim.Adam(actor_params, lr=d_arg["rl"]["policy_lr"])
     # Alpha (entropy)
     if d_arg["rl"]["autotune"]:
         target_entropy = -float(np.prod(d_arg_env["action_space_shape"]))
@@ -434,7 +437,7 @@ def run_async_sac(d_arg):
                 if grad_steps % d_arg["rl"]["policy_frequency"] == 0:
                     z_detached = z.detach()
                     for _ in range(d_arg["rl"]["policy_frequency"]):
-                        actions, log_pi, _ = actor.get_action(state)
+                        actions, log_pi, _ = actor.get_action(z_detached)
                         q1_pi = qf1(z_detached, actions)
                         q2_pi = qf2(z_detached, actions)
                         min_q_pi = torch.min(q1_pi, q2_pi)
@@ -478,6 +481,7 @@ def run_async_sac(d_arg):
                 except queue.Full:
                     # if actor queue full, skip this update (actor will pick up later)
                     pass
+
         print("Starting testing loop...")
         test_timesteps = d_arg["rl"]["test_timesteps"]
         pbar = tqdm(total=test_timesteps)
