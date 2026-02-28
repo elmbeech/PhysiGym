@@ -273,12 +273,14 @@ class RLSetEncoder(nn.Module):
 class FeatureExtractor(nn.Module):
     """Handles image-based, vector-based and graph-based state inputs dynamically."""
 
-    def __init__(self, cfg, neural_architecture_image="impala", **kwargs):
+    def __init__(self, cfg, neural_architecture_image="impala"):
         super().__init__()
 
         obs_shape = cfg["observation_space_shape"]
         self.is_graph = True if "graph" in cfg["observation_mode"] else False
-        self.is_tranformer_node = True if "transformer" in cfg["observation_mode"] else False
+        self.is_tranformer_node = (
+            True if "transformer" in cfg["observation_mode"] else False
+        )
         self.is_image = (len(obs_shape) == 3) and not self.is_tranformer_node
 
         if self.is_graph:
@@ -385,26 +387,29 @@ class Encoder(nn.Module):
 class QNetwork(nn.Module):
     """Critic network (Q-function)"""
 
-    def __init__(self, cfg, neural_architecture_image, **kwargs):
+    def __init__(self, encoder):
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
-
+        self.encoder = encoder
         # Fully connected layers
         self.fc1 = nn.LazyLinear(256)
         self.fc2 = nn.LazyLinear(256)
         self.fc3 = nn.LazyLinear(1)
         self.mish = nn.Mish()
 
-    def forward(self, x, a):
-        x = self.feature_extractor(x)  # Extract features
-        x = torch.cat([x, a], dim=1)  # Concatenate state and action
+    def forward(self, z, a):
+        x = torch.cat([z, a], dim=1)  # Concatenate state and action
 
         x = self.mish(self.fc1(x))
         x = self.mish(self.fc2(x))
         x = self.fc3(x)
         return x
+
+
+"""
+        self.feature_extractor = FeatureExtractor(
+            cfg, neural_architecture_image, **kwargs
+        )
+"""
 
 
 class Actor(nn.Module):
@@ -413,11 +418,9 @@ class Actor(nn.Module):
     LOG_STD_MAX = 2
     LOG_STD_MIN = -5
 
-    def __init__(self, cfg, neural_architecture_image, **kwargs):
+    def __init__(self, cfg, encoder: nn.Module):
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
+        self.encoder = encoder
         action_dim = np.prod(cfg["action_space_shape"])
 
         # Fully connected layers
@@ -443,7 +446,7 @@ class Actor(nn.Module):
         )
 
     def forward(self, x):
-        x = self.feature_extractor(x)  # Extract features
+        x = self.encoder(x)  # Extract features
 
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
@@ -458,7 +461,7 @@ class Actor(nn.Module):
         return mean, log_std
 
     def get_action(self, x):
-        mean, log_std = self(x)
+        mean, log_std = self.forward(x)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
 
