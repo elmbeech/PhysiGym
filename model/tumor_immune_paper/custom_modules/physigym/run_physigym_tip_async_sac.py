@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 # Your project imports
 from vectorized_tip import vec_envs
-from nn_tip import Actor, QNetwork, FeatureExtractor
+from nn import Actor, QNetwork, FeatureExtractor
 from rb_tip import ReplayBuffer
 
 from torch.multiprocessing import Event, Queue
@@ -55,6 +55,7 @@ def obs_to_pyg(obs_dict, device):
 
 def actor_process(
     actor_queue,
+    encoder_queue,
     sample_queue,
     stats_queue,
     d_arg,
@@ -90,16 +91,17 @@ def actor_process(
         * d_arg["rl"]["train_total_timesteps"]
     )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-    encoder = FeatureExtractor(
+    encoder_local = FeatureExtractor(
         cfg=d_arg_env,
         neural_architecture_image=d_arg.get("neural_architecture_image", "impala"),
     ).cpu()
-    actor_local = Actor(d_arg_env, encoder).cpu()
+    actor_local = Actor(d_arg_env).cpu()
     if d_arg_env["is_graph"]:
         obs_nn = obs_to_pyg(obs, "cpu")
     else:
         obs_nn = torch.from_numpy(obs).cpu()
-        _, _, _ = actor_local.get_action(obs_nn)
+
+    _, _, _ = actor_local.get_action(encoder_local(obs_nn))
     actor_local.eval()
     num_envs = envs.num_envs
     pending_mode = "train"
@@ -110,14 +112,22 @@ def actor_process(
         # Try to fetch a new policy (non-blocking)
         try:
             while True:
-                new_params = actor_queue.get_nowait()
+                new_params_actor = actor_queue.get_nowait()
+                new_params_encoder = encoder_queue.get_nowait()
                 # load params safely
                 try:
-                    actor_local.load_state_dict(new_params)
+                    actor_local.load_state_dict(new_params_actor)
                 except Exception:
                     # if state_dict was saved on CUDA, map_location might be required
                     actor_local.load_state_dict(
-                        {k: v.cpu() for k, v in new_params.items()}
+                        {k: v.cpu() for k, v in new_params_actor.items()}
+                    )
+                try:
+                    encoder_local.load_state_dict(new_params_encoder)
+                except Exception:
+                    # if state_dict was saved on CUDA, map_location might be required
+                    encoder_local.load_state_dict(
+                        {k: v.cpu() for k, v in new_params_encoder.items()}
                     )
         except queue.Empty:
             pass
@@ -236,6 +246,7 @@ def run_async_sac(d_arg):
     random.seed(seed)
     # Process communication
     actor_queue = mp.Queue(maxsize=5)
+    encoder_queue = mp.Queue(maxsize=5)
     sample_queue = mp.Queue(maxsize=10000)
     stats_queue = mp.Queue(maxsize=1000)
     env_info_queue = mp.Queue(maxsize=1)
@@ -245,6 +256,7 @@ def run_async_sac(d_arg):
         target=actor_process,
         args=(
             actor_queue,
+            encoder_queue,
             sample_queue,
             stats_queue,
             d_arg,
@@ -269,9 +281,9 @@ def run_async_sac(d_arg):
     encoder = FeatureExtractor(
         cfg=d_arg_env, neural_architecture_image=d_arg["neural_architecture_image"]
     )
-    actor = Actor(d_arg_env, encoder).to(device)
-    qf1 = QNetwork(encoder).to(device)
-    qf2 = QNetwork(encoder).to(device)
+    actor = Actor(d_arg_env).to(device)
+    qf1 = QNetwork().to(device)
+    qf2 = QNetwork().to(device)
     # Networks
     if d_arg_env["is_graph"]:
         dummy_graph = Data(
@@ -300,14 +312,6 @@ def run_async_sac(d_arg):
     qf1_target = deepcopy(qf1).to(device)
     qf2_target = deepcopy(qf2).to(device)
 
-    q_optimizer = optim.Adam(
-        list(qf1.parameters()) + list(qf2.parameters()),
-        lr=d_arg["rl"]["q_lr"],
-    )
-    actor_params = [
-        p for n, p in actor.named_parameters() if not n.startswith("encoder")
-    ]
-    actor_optimizer = optim.Adam(actor_params, lr=d_arg["rl"]["policy_lr"])
     # Alpha (entropy)
     if d_arg["rl"]["autotune"]:
         target_entropy = -float(np.prod(d_arg_env["action_space_shape"]))
@@ -317,6 +321,14 @@ def run_async_sac(d_arg):
     else:
         alpha = float(d_arg["rl"]["alpha"])
 
+    try:
+        encoder_queue.put_nowait(
+            {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
+        )
+    except queue.Full:
+        encoder_queue.put(
+            {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
+        )
     # send initial policy
     try:
         actor_queue.put_nowait(
@@ -324,6 +336,13 @@ def run_async_sac(d_arg):
         )
     except queue.Full:
         actor_queue.put({k: v.detach().cpu() for k, v in actor.state_dict().items()})
+
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=d_arg["rl"]["q_lr"])
+    q_optimizer = optim.Adam(
+        list(qf1.parameters()) + list(qf2.parameters()),
+        lr=d_arg["rl"]["q_lr"],
+    )
+    actor_optimizer = optim.Adam(actor.parameters(), lr=d_arg["rl"]["policy_lr"])
 
     # Logging
     output_dir = d_arg["model"]["output_dir"]
@@ -402,9 +421,9 @@ def run_async_sac(d_arg):
                 reward = batch["reward"]
 
                 # ---------- Encode once ----------
-                z = qf1.encoder(state)
+                z = encoder(state)
                 with torch.no_grad():
-                    z_next = qf1_target.encoder(next_state)
+                    z_next = encoder(next_state)
 
                 # ---------- Target Q ----------
                 with torch.no_grad():
@@ -427,9 +446,15 @@ def run_async_sac(d_arg):
 
                 qf_loss = F.mse_loss(q1, next_q) + F.mse_loss(q2, next_q)
 
+                # Zero gradients for ALL optimizers that will update
                 q_optimizer.zero_grad()
-                qf_loss.backward()
-                q_optimizer.step()
+                encoder_optimizer.zero_grad()  # Add this!
+
+                qf_loss.backward()  # Gradients flow to both Q-heads AND encoder
+
+                # Step both optimizers
+                q_optimizer.step()  # Updates Q-heads
+                encoder_optimizer.step()  # Updates encoder!
 
                 grad_steps += 1
 
@@ -476,6 +501,14 @@ def run_async_sac(d_arg):
                 try:
                     actor_queue.put_nowait(
                         {k: v.detach().cpu() for k, v in actor.state_dict().items()}
+                    )
+
+                except queue.Full:
+                    # if actor queue full, skip this update (actor will pick up later)
+                    pass
+                try:
+                    encoder_queue.put_nowait(
+                        {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
                     )
 
                 except queue.Full:
@@ -661,7 +694,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TRAIN_TEST_TIP",
+        "project": "SAC_ASYNC_TRAIN_TEST_TIP_60min",
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,
