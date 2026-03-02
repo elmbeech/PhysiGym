@@ -286,9 +286,7 @@ class FeatureExtractor(nn.Module):
         if self.is_graph:
             # Assume node features have fixed dimension
             node_feature_dim = cfg["node_feature_dim"]
-            self.feature_extractor = GraphFeatureExtractor(
-                node_feature_dim=node_feature_dim
-            )
+            self.feature_extractor = GraphFeatureExtractor(in_channels=node_feature_dim)
             self.feature_size = 128
         elif self.is_tranformer_node:
             if neural_architecture_image == "transformer_encoder":
@@ -403,13 +401,6 @@ class QNetwork(nn.Module):
         x = self.mish(self.fc2(x))
         x = self.fc3(x)
         return x
-
-
-"""
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
-"""
 
 
 class Actor(nn.Module):
