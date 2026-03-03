@@ -141,11 +141,12 @@ def actor_process(
             # Inference
             with torch.no_grad():
                 if d_arg_env["is_graph"]:
-                    pyg_batch = obs_to_pyg(obs, "cpu")
-                    actions_tensor, _, _ = actor_local.get_action(pyg_batch)
+                    obs = obs_to_pyg(obs, "cpu")
+                    obs_nn = encoder_local(obs)
                 else:
-                    x = torch.from_numpy(obs).cpu()
-                    actions_tensor, _, _ = actor_local.get_action(x)
+                    obs = torch.from_numpy(obs).cpu()
+                obs_nn = encoder_local(obs)
+                actions_tensor, _, _ = actor_local.get_action(obs_nn)
                 actions = actions_tensor.cpu().numpy()
 
         # Step envs
@@ -280,7 +281,7 @@ def run_async_sac(d_arg):
     )
     encoder = FeatureExtractor(
         cfg=d_arg_env, neural_architecture_image=d_arg["neural_architecture_image"]
-    )
+    ).to(device)
     actor = Actor(d_arg_env).to(device)
     qf1 = QNetwork().to(device)
     qf2 = QNetwork().to(device)
