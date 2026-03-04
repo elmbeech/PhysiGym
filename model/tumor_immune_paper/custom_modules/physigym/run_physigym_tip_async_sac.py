@@ -355,6 +355,7 @@ def run_async_sac(d_arg):
             name=Path(output_dir).name,
             config=d_arg,
         )
+        run.define_metric("charts/*", step_metric="samples_drained")
 
     tau = d_arg["rl"]["tau"]
     train_total_timesteps = d_arg["rl"]["train_total_timesteps"]
@@ -399,15 +400,13 @@ def run_async_sac(d_arg):
                     "charts/timestamp": stat["timestamp"],
                     "charts/grad_steps": grad_steps,
                     "charts/buffer_size": len(rb),
-                    "charts/samples_drained": drained,
                 }
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict)
                 else:
                     for tag, value in log_dict.items():
-                        writer.add_scalar(tag, value, drained)
-                if d_arg["simulation"]["wandb_track"]:
-                    wandb.log(log_dict, step=drained)
+                        if tag != "samples_drained":
+                            writer.add_scalar(tag, value, drained)
             # If not enough samples yet, wait a little and continue
             if drained < max(d_arg["rl"]["learning_starts"], d_arg["rl"]["batch_size"]):
                 time.sleep(0.1)
