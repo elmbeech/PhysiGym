@@ -113,7 +113,6 @@ def actor_process(
         try:
             while True:
                 new_params_actor = actor_queue.get_nowait()
-                new_params_encoder = encoder_queue.get_nowait()
                 # load params safely
                 try:
                     actor_local.load_state_dict(new_params_actor)
@@ -122,13 +121,15 @@ def actor_process(
                     actor_local.load_state_dict(
                         {k: v.cpu() for k, v in new_params_actor.items()}
                     )
-                try:
-                    encoder_local.load_state_dict(new_params_encoder)
-                except Exception:
-                    # if state_dict was saved on CUDA, map_location might be required
-                    encoder_local.load_state_dict(
-                        {k: v.cpu() for k, v in new_params_encoder.items()}
-                    )
+                if "scalars" not in d_arg_env["observation_mode"]:
+                    new_params_encoder = encoder_queue.get_nowait()
+                    try:
+                        encoder_local.load_state_dict(new_params_encoder)
+                    except Exception:
+                        # if state_dict was saved on CUDA, map_location might be required
+                        encoder_local.load_state_dict(
+                            {k: v.cpu() for k, v in new_params_encoder.items()}
+                        )
         except queue.Empty:
             pass
         if local_step <= d_arg["rl"]["learning_starts"]:
@@ -337,8 +338,8 @@ def run_async_sac(d_arg):
         )
     except queue.Full:
         actor_queue.put({k: v.detach().cpu() for k, v in actor.state_dict().items()})
-
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=d_arg["rl"]["q_lr"])
+    if "scalars" not in d_arg_env["observation_mode"]:
+        encoder_optimizer = optim.Adam(encoder.parameters(), lr=d_arg["rl"]["q_lr"])
     q_optimizer = optim.Adam(
         list(qf1.parameters()) + list(qf2.parameters()),
         lr=d_arg["rl"]["q_lr"],
@@ -449,13 +450,17 @@ def run_async_sac(d_arg):
 
                 # Zero gradients for ALL optimizers that will update
                 q_optimizer.zero_grad()
-                encoder_optimizer.zero_grad()  # Add this!
+                encoder_optimizer.zero_grad() if "scalars" not in d_arg_env[
+                    "observation_mode"
+                ] else None
 
                 qf_loss.backward()  # Gradients flow to both Q-heads AND encoder
 
                 # Step both optimizers
                 q_optimizer.step()  # Updates Q-heads
-                encoder_optimizer.step()  # Updates encoder!
+                encoder_optimizer.step() if "scalars" not in d_arg_env[
+                    "observation_mode"
+                ] else None
 
                 grad_steps += 1
 
@@ -507,14 +512,18 @@ def run_async_sac(d_arg):
                 except queue.Full:
                     # if actor queue full, skip this update (actor will pick up later)
                     pass
-                try:
-                    encoder_queue.put_nowait(
-                        {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
-                    )
+                if "scalars" not in d_arg_env["observation_mode"]:
+                    try:
+                        encoder_queue.put_nowait(
+                            {
+                                k: v.detach().cpu()
+                                for k, v in encoder.state_dict().items()
+                            }
+                        )
 
-                except queue.Full:
-                    # if actor queue full, skip this update (actor will pick up later)
-                    pass
+                    except queue.Full:
+                        # if actor queue full, skip this update (actor will pick up later)
+                        pass
 
         print("Starting testing loop...")
         test_timesteps = d_arg["rl"]["test_timesteps"]

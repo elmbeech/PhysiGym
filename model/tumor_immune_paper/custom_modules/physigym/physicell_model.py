@@ -30,7 +30,7 @@ import skimage as ski
 from tysserand import tysserand as ty
 from sklearn.cluster import KMeans
 import cv2
-
+from numpy.fft import fft2, fftshift
 
 FIBO = np.array([1, 2, 3, 5, 7, 13, 21, 34, 55])
 LENGTH_FIBO = len(FIBO)
@@ -125,6 +125,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             "graph_knn",
             "transformer_nodes",
             "transformer_nodes_2",
+            "scalars_signal_processed",
         ]:
             raise ValueError(
                 f"Error: unknown observation type: {self.observation_mode}"
@@ -194,21 +195,23 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         output:
             o_observation_space structure.
-                the struct have to be built out of self.kwargs['img_mc_grid_size_y']mnasium.spaces elements.
+                the struct have to be built out of gymnasium.spaces elements.
                 there are no other limits.
-                + https://self.kwargs['img_mc_grid_size_y']mnasium.farama.org/main/api/spaces/
+                + https://gymnasium.farama.org/main/api/spaces/
 
         run:
             internal function, user defined.
 
         description:
-            data structure built out of self.kwargs['img_mc_grid_size_y']mnasium.spaces elements.
+            data structure built out of gymnasium.spaces elements.
             this struct has to specify type and range
             for each observed variable.
         """
         observation_mode = self.observation_mode
         self.kwargs["img_mc_grid_size_x"] = self.kwargs["img_mc_grid_size_x"]
         self.kwargs["img_mc_grid_size_y"] = self.kwargs["img_mc_grid_size_y"]
+        self.ratio_img_mc_size_y = self.height / self.kwargs["img_mc_grid_size_y"]
+        self.ratio_img_mc_size_x = self.width / self.kwargs["img_mc_grid_size_x"]
         # model dependent observation_space processing logic goes here!
         if self.observation_mode == "scalars_cells":
             o_observation_space = spaces.Box(
@@ -239,9 +242,6 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
             f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
         ]:
-            # Define the Box space for the multichannel image
-            self.ratio_img_mc_size_y = self.height / self.kwargs["img_mc_grid_size_y"]
-            self.ratio_img_mc_size_x = self.width / self.kwargs["img_mc_grid_size_x"]
             if (
                 observation_mode
                 == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
@@ -323,6 +323,23 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 high=2**2,
                 shape=(self.max_clusters, self.features_2),
                 dtype=np.float32,
+            )
+        elif self.observation_mode == "scalars_signal_processed":
+            self.ratio_img_mc_size_y = self.height
+            self.ratio_img_mc_size_x = self.width
+            # Calculate number of channels
+            # 2 channels per cell type (alive/dead)
+            num_channels = self.cell_type_count * 2
+
+            # Number of unique interaction pairs (Upper Triangle of C x C)
+            num_pairs = (num_channels * (num_channels + 1)) // 2
+
+            # Total vector size
+            self.num_bins = 16  # You can tune this
+            vector_size = num_pairs * self.num_bins
+
+            o_observation_space = spaces.Box(
+                low=-2.0, high=2.0, shape=(vector_size,), dtype=np.float32
             )
 
         else:
@@ -463,6 +480,86 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         scales = np.where((max_vals - min_vals) > 0, max_vals - min_vals, 1)
         return ski.util.img_as_ubyte(((image - min_vals) / scales))
 
+    def get_scalars_signal_processed(self, mc_matrix, num_bins=16):
+        """
+        Fully vectorized version.
+
+        mc_matrix: (C, H, W)
+        Returns:
+            1D float32 feature vector of size:
+            (C*(C+1)//2) * num_bins
+        """
+
+        C, H, W = mc_matrix.shape
+
+        # --------------------------------------------------
+        # 1. Compute FFTs (vectorized over channels)
+        # --------------------------------------------------
+        ffts = fftshift(fft2(mc_matrix, axes=(-2, -1)), axes=(-2, -1))
+        # shape: (C, H, W)
+
+        # --------------------------------------------------
+        # 2. Compute ALL cross-spectra simultaneously
+        # --------------------------------------------------
+        # Broadcasting:
+        # ffts[:, None, :, :] -> (C, 1, H, W)
+        # ffts[None, :, :, :] -> (1, C, H, W)
+        cross = ffts[:, None, :, :] * np.conj(ffts[None, :, :, :])
+        # shape: (C, C, H, W)
+
+        cross_mag = np.abs(cross)
+        log_cross = np.log1p(cross_mag)
+
+        # --------------------------------------------------
+        # 3. Build normalized radial grid
+        # --------------------------------------------------
+        y, x = np.ogrid[:H, :W]
+        cy, cx = H // 2, W // 2
+
+        r = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+        r_norm = r / (r.max() + 1e-8)
+
+        bins = np.linspace(0.0, 1.0, num_bins + 1)
+
+        # --------------------------------------------------
+        # 4. Radial averaging for all (C, C) pairs at once
+        # --------------------------------------------------
+
+        # Flatten spatial dims
+        r_flat = r_norm.ravel()
+        log_flat = log_cross.reshape(C, C, -1)  # (C, C, H*W)
+
+        # Digitize once
+        bin_ids = np.digitize(r_flat, bins) - 1
+        bin_ids = np.clip(bin_ids, 0, num_bins - 1)
+
+        # Allocate output tensor
+        radial_mean = np.zeros((C, C, num_bins), dtype=np.float64)
+        counts = np.zeros(num_bins, dtype=np.float64)
+
+        # Compute counts once
+        for b in range(num_bins):
+            counts[b] = np.sum(bin_ids == b)
+
+        # Accumulate weighted sums
+        for b in range(num_bins):
+            mask = bin_ids == b
+            if counts[b] > 0:
+                radial_mean[:, :, b] = log_flat[:, :, mask].mean(axis=-1)
+
+        # --------------------------------------------------
+        # 5. L2 normalize per pair
+        # --------------------------------------------------
+        norms = np.linalg.norm(radial_mean, axis=-1, keepdims=True) + 1e-8
+        radial_mean /= norms
+
+        # --------------------------------------------------
+        # 6. Keep only upper triangle (including diagonal)
+        # --------------------------------------------------
+        i_upper, j_upper = np.triu_indices(C)
+        features = radial_mean[i_upper, j_upper]
+        return features.reshape(-1).astype(np.float32)
+
     def get_observation(self):
         """
         input:
@@ -536,6 +633,25 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 ]
             )
 
+        elif self.observation_mode == "scalars_signal_processed":
+            # 1. Gather all 2D layers into a (C, H, W) stack
+            # self.get_matrix_cells() -> (cell_type_count, H, W)
+            # self.get_matrix_dead_cells() -> (cell_type_count, H, W)
+
+            mc_matrix = np.concatenate(
+                [
+                    self.get_matrix_cells(),
+                    self.get_matrix_dead_cells(),
+                ],
+                axis=0,
+            ).astype(np.float32)
+
+            # 2. Extract the spectral interaction features
+            # This uses your optimized vectorized function
+            o_observation = self.get_scalars_signal_processed(
+                mc_matrix, num_bins=self.num_bins
+            )
+
         elif self.observation_mode in ["graph_delaunay", "graph_knn"]:
             self.df_alive.set_index("ID", inplace=True)
             coords = self.df_alive[["x", "y"]].values
@@ -590,6 +706,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                 "node_mask": node_mask,
                 "edge_mask": edge_mask,
             }
+
         elif self.observation_mode == "transformer_nodes":
             df = self.df_alive.set_index("ID", drop=True)
 
