@@ -394,6 +394,7 @@ def run_async_sac(d_arg):
                     break
 
                 log_dict = {
+                    "samples_drained": drained,
                     "charts/return": stat["episode_return"],
                     "charts/length": stat["episode_length"],
                     "charts/step": stat["step"],
