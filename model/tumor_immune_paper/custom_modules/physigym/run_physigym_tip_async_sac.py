@@ -559,22 +559,26 @@ def run_async_sac(d_arg):
                 except queue.Empty:
                     break
 
-                # Only log test episodes
                 if stat["train_test"] == "test":
                     type_mode = stat["type_mode"]
+
+                    # Construct the log dictionary
                     log_dict = {
+                        # The "Magic" Key: matches the define_metric step_metric
+                        "samples_drained": test_drained + drained,
                         f"charts/test_{type_mode}_return": stat["episode_return"],
                         f"charts/test_{type_mode}_length": stat["episode_length"],
                         f"charts/test_{type_mode}_timestamp": stat["timestamp"],
-                        f"charts/test_{type_mode}_step": stat["step"] - drained,
+                        f"charts/test_{type_mode}_step_offset": stat["step"] - drained,
                     }
 
                     if d_arg["simulation"]["wandb_track"]:
-                        wandb.log(log_dict, step=test_drained + drained)
+                        run.log(log_dict)
                     else:
                         for tag, value in log_dict.items():
-                            writer.add_scalar(tag, value, test_drained)
-            # small sleep to avoid busy-waiting
+                            if tag != "samples_drained":
+                                writer.add_scalar(tag, value, drained)
+
             time.sleep(0.05)
 
     except KeyboardInterrupt:
