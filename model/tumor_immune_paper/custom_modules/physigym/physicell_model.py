@@ -108,7 +108,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             try:
                 self.reducers = self.reducers[name]
             except:
-                raise ValueError(f"Error: unknown reducers: {name}")
+                self.reducers = self.reducers["mean"]
         if "img" in observation_mode:
             self.observation_mode = (
                 observation_mode + f"_{img_mc_grid_size_x}_{img_mc_grid_size_y}"
@@ -126,6 +126,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             "transformer_nodes",
             "transformer_nodes_2",
             "scalars_signal_processed",
+            "scalars_colony_state",
         ]:
             raise ValueError(
                 f"Error: unknown observation type: {self.observation_mode}"
@@ -139,6 +140,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         self.max_clusters = FIBO[-1]
         self.features = 9
         self.features_2 = 16
+        self.clusters = 16
 
         # call super class init
         super().__init__(
@@ -340,6 +342,20 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
             o_observation_space = spaces.Box(
                 low=-2.0, high=2.0, shape=(vector_size,), dtype=np.float32
+            )
+        elif self.observation_mode == "scalars_colony_state":
+            C = self.cell_type_count
+            S = self.substrate_count
+            K = self.clusters
+            T = len(self.cell_type_unique)
+            self.reducers = np.mean
+
+            vector_size = 2 * C + S + K + (1 + T)
+            o_observation_space = spaces.Box(
+                low=-(2**2),
+                high=2**2,
+                shape=(vector_size,),
+                dtype=np.float32,
             )
 
         else:
@@ -560,6 +576,120 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         features = radial_mean[i_upper, j_upper]
         return features.reshape(-1).astype(np.float32)
 
+    # --------------------------------------------------
+    # Soft Spatial Encoding (Continuous Density Field)
+    # --------------------------------------------------
+    def soft_spatial_encoding(self, coords, anchors, sigma=0.1):
+        """
+        Smooth kernel spatial embedding.
+
+        coords : (N,2) normalized position of cells
+        anchors : (K,2) fixed spatial reference anchors
+        sigma : kernel bandwidth
+
+        Returns
+        -------
+        encoding : (K,)
+        """
+
+        if coords.shape[0] == 0:
+            return np.zeros((anchors.shape[0],), dtype=np.float32)
+
+        K = anchors.shape[0]
+        encoding = np.zeros((K,), dtype=np.float32)
+
+        for k in range(K):
+            diff = coords - anchors[k]
+            dist2 = np.sum(diff**2, axis=1)
+
+            weights = np.exp(-dist2 / (2 * sigma**2))
+            encoding[k] = np.mean(weights)
+        return encoding
+
+    # --------------------------------------------------
+    # New State Space Observation Builder
+    # --------------------------------------------------
+
+    def get_scalars_colony_state(self):
+        """
+        Construct smooth RL-friendly colony state representation.
+        """
+
+        # ============================================================
+        # 1. Population Scalars
+        # ============================================================
+
+        cell_features = self.get_cells_scalars()
+
+        # ============================================================
+        # 2. Substrate Scalars
+        # ============================================================
+
+        substrate_features = self.get_substrates_scalars()
+
+        # ============================================================
+        # 3. Spatial Soft Density Encoding
+        # ============================================================
+
+        df = self.df_alive.copy()
+
+        if len(df) > 0:
+            # Normalize coordinates
+            df["x"] = (df["x"] - self.x_min) / (self.x_max - self.x_min + 1e-8)
+            df["y"] = (df["y"] - self.y_min) / (self.y_max - self.y_min + 1e-8)
+
+            coords = df[["x", "y"]].to_numpy(np.float32)
+
+            # Define spatial anchors (fixed grid landmarks)
+            grid_n = int(np.sqrt(self.clusters))
+            xs = np.linspace(0, 1, grid_n)
+            ys = np.linspace(0, 1, grid_n)
+
+            anchors = np.array(
+                [(x, y) for x in xs for y in ys],
+                dtype=np.float32,
+            )
+
+            spatial_encoding = self.soft_spatial_encoding(
+                coords,
+                anchors,
+                sigma=0.15,
+            )
+
+        else:
+            spatial_encoding = np.zeros((self.clusters,), dtype=np.float32)
+
+        # ============================================================
+        # 4. Morphology Statistics
+        # ============================================================
+
+        if len(df) > 0:
+            # Type entropy
+            type_props = []
+            for t in self.cell_type_unique:
+                type_props.append(np.mean(df["type"].to_numpy() == t))
+
+            type_props = np.array(type_props, dtype=np.float32)
+
+            entropy = -np.sum(type_props * np.log(type_props + 1e-6))
+            morphology_features = np.concatenate([[entropy], type_props])
+
+        else:
+            morphology_features = np.zeros(len(self.cell_type_unique) + 1)
+
+        # ============================================================
+        # 5. Final Observation Vector
+        # ============================================================
+        observation = np.concatenate(
+            [
+                cell_features,
+                substrate_features,
+                spatial_encoding,
+                morphology_features,
+            ]
+        ).astype(np.float32)
+        return observation
+
     def get_observation(self):
         """
         input:
@@ -632,7 +762,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     self.get_matrix_substrates(),
                 ]
             )
-
+        elif self.observation_mode == "scalars_colony_state":
+            o_observation = self.get_scalars_colony_state()
         elif self.observation_mode == "scalars_signal_processed":
             # 1. Gather all 2D layers into a (C, H, W) stack
             # self.get_matrix_cells() -> (cell_type_count, H, W)
