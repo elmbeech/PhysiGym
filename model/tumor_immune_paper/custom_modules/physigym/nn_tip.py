@@ -10,14 +10,14 @@ import numpy as np
 
 class PixelPreprocess(nn.Module):
     """
-    Normalizes pixel observations to [-0.5, 0.5].
+    Normalizes pixel observations to [0.0, 1.0].
     """
 
     def __init__(self):
         super().__init__()
 
     def forward(self, x):
-        return x.div(255.0).sub(0.5)
+        return x.div(255.0)
 
 
 class ResidualBlock(nn.Module):
@@ -82,251 +82,54 @@ class GraphFeatureExtractor(nn.Module):
         return global_mean_pool(x, data.batch)
 
 
-class RelativeBias(nn.Module):
-    def __init__(self, heads, hidden=32):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(2, hidden), nn.ReLU(), nn.Linear(hidden, heads)
-        )
-
-    def forward(self, xy):  # (B, N, 2)
-        delta = xy[:, :, None, :] - xy[:, None, :, :]  # (B, N, N, 2)
-        return self.mlp(delta)  # (B, N, N, H)
-
-
-# -----------------------------
-# Fast attention block
-# -----------------------------
-class FastAttention(nn.Module):
-    def __init__(self, dim, heads=4):
-        super().__init__()
-        self.heads = heads
-        self.scale = (dim // heads) ** -0.5
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.proj = nn.Linear(dim, dim)
-
-    def forward(self, x, attn_mask=None, bias=None):
-        B, N, D = x.shape
-        H = self.heads
-
-        qkv = self.qkv(x).view(B, N, 3, H, D // H)
-        q, k, v = qkv.unbind(dim=2)
-
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-
-        if bias is not None:
-            attn = attn + bias.permute(0, 3, 1, 2)
-
-        if attn_mask is not None:
-            attn = attn.masked_fill(attn_mask[:, None, None, :] == 0, -1e9)
-
-        attn = attn.softmax(dim=-1)
-        out = (attn @ v).transpose(1, 2).reshape(B, N, D)
-
-        return self.proj(out)
-
-
-# -----------------------------
-# Encoder block
-# -----------------------------
-class FastBlock(nn.Module):
-    def __init__(self, dim, heads=4, mlp_ratio=2):
-        super().__init__()
-        self.attn = FastAttention(dim, heads)
-        self.ff = nn.Sequential(
-            nn.Linear(dim, dim * mlp_ratio), nn.ReLU(), nn.Linear(dim * mlp_ratio, dim)
-        )
-        self.norm1 = nn.LayerNorm(dim)
-        self.norm2 = nn.LayerNorm(dim)
-
-    def forward(self, x, attn_mask=None, bias=None):
-        x = x + self.attn(self.norm1(x), attn_mask, bias)
-        x = x + self.ff(self.norm2(x))
-        return x
-
-
-# -----------------------------
-# Full encoder
-# -----------------------------
-class FastSetEncoder(nn.Module):
-    def __init__(self, input_dim, dim=64, depth=2, heads=4, use_relative_bias=True):
-        super().__init__()
-
-        self.embed = nn.Linear(input_dim, dim)
-        self.blocks = nn.ModuleList([FastBlock(dim, heads) for _ in range(depth)])
-
-        self.rel_bias = RelativeBias(heads) if use_relative_bias else None
-        self.norm = nn.LayerNorm(dim)
-
-    def forward(self, x):
-        """
-        x: (B, N, input_dim)
-           zero rows = padding
-        """
-
-        # padding mask: 1 = valid, 0 = padding
-        mask = (x.abs().sum(dim=-1) > 0).float()
-
-        xy = x[..., :2]  # raw x,y
-
-        x = self.embed(x)
-
-        bias = self.rel_bias(xy) if self.rel_bias else None
-
-        for block in self.blocks:
-            x = block(x, mask, bias)
-
-        x = self.norm(x)
-
-        # mean pooling over valid nodes
-        x = (x * mask[..., None]).sum(dim=1) / (mask.sum(dim=1, keepdim=True) + 1e-6)
-
-        return x
-
-
-class FeatureCNN(nn.Module):
-    """
-    Lightweight CNN over feature dimension (NOT nodes).
-    """
-
-    def __init__(self, in_dim, out_dim):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Conv1d(1, 8, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv1d(8, 1, kernel_size=3, padding=1),
-        )
-        self.proj = nn.Linear(in_dim, out_dim)
-
-    def forward(self, x):
-        # x: (B, N, F)
-        B, N, F = x.shape
-        x = x.view(B * N, 1, F)
-        x = self.net(x)
-        x = x.view(B, N, F)
-        return self.proj(x)
-
-
-class RLTransformerBlock(nn.Module):
-    def __init__(self, dim, heads=2, mlp_ratio=2):
-        super().__init__()
-        self.attn = FastAttention(dim, heads)
-        self.norm1 = nn.LayerNorm(dim)
-        self.norm2 = nn.LayerNorm(dim)
-        self.ff = nn.Sequential(
-            nn.Linear(dim, dim * mlp_ratio),
-            nn.ReLU(),
-            nn.Linear(dim * mlp_ratio, dim),
-        )
-
-    def forward(self, x, mask=None, bias=None):
-        x = x + self.attn(self.norm1(x), mask, bias)
-        x = x + self.ff(self.norm2(x))
-        return x
-
-
-class RLSetEncoder(nn.Module):
-    def __init__(
-        self,
-        input_dim,
-        token_dim=32,
-        depth=1,
-        heads=2,
-        use_relative_bias=True,
-    ):
-        super().__init__()
-
-        self.pre = FeatureCNN(input_dim, token_dim)
-        self.blocks = nn.ModuleList(
-            [RLTransformerBlock(token_dim, heads) for _ in range(depth)]
-        )
-
-        self.rel_bias = RelativeBias(heads) if use_relative_bias else None
-        self.norm = nn.LayerNorm(token_dim)
-
-    def forward(self, x):
-        """
-        x: (B, N, F), zero rows = padding
-        """
-        mask = (x.abs().sum(dim=-1) > 0).float()
-
-        xy = x[..., :2] if x.size(-1) >= 2 else None
-
-        x = self.pre(x)
-        bias = self.rel_bias(xy) if self.rel_bias else None
-
-        for block in self.blocks:
-            x = block(x, mask, bias)
-
-        x = self.norm(x)
-
-        # masked mean pooling
-        x = (x * mask[..., None]).sum(dim=1) / (mask.sum(dim=1, keepdim=True) + 1e-6)
-
-        return x
-
-
 class FeatureExtractor(nn.Module):
-    """Handles both image-based and vector-based state inputs dynamically."""
+    """Handles image-based, vector-based and graph-based state inputs dynamically."""
 
-    def __init__(self, cfg, neural_architecture_image="impala", **kwargs):
+    def __init__(self, cfg, neural_architecture_image="impala"):
         super().__init__()
 
-        self.is_graph = cfg["is_graph"]
-        self.is_image = False
+        obs_shape = cfg["observation_space_shape"]
+        self.is_graph = True if "graph" in cfg["observation_mode"] else False
         self.is_tranformer_node = (
             True if "transformer" in cfg["observation_mode"] else False
         )
-
-        obs_shape = cfg["observation_space_shape"] if not self.is_graph else None
+        self.is_image = (len(obs_shape) == 3) and not self.is_tranformer_node
 
         if self.is_graph:
             # Assume node features have fixed dimension
             node_feature_dim = cfg["node_feature_dim"]
             self.feature_extractor = GraphFeatureExtractor(
-                node_feature_dim=node_feature_dim
+                in_channels=node_feature_dim  # ✅ Correct parameter
             )
             self.feature_size = 128
-        elif self.is_tranformer_node:
-            if neural_architecture_image == "transformer_encoder":
-                self.feature_extractor = FastSetEncoder(input_dim=obs_shape[-1], dim=64)
-            else:
-                self.feature_extractor = RLSetEncoder(input_dim=obs_shape[-1])
 
+        elif self.is_image:
+            if neural_architecture_image == "impala":
+                layers = [
+                    PixelPreprocess(),
+                    ImpalaBlock(obs_shape[0], 16),
+                    ImpalaBlock(16, 32),
+                    ImpalaBlock(32, 32),
+                    nn.Flatten(),
+                ]
+            elif neural_architecture_image == "hadamax":
+                layers = [
+                    PixelPreprocess(),
+                    HadamaxBlock(obs_shape[0], 16),
+                    HadamaxBlock(16, 32),
+                    HadamaxBlock(32, 32),
+                    nn.Flatten(),
+                ]
+            else:
+                raise ValueError(
+                    f"Error: unknown neural architecture: {neural_architecture_image}"
+                )
+
+            self.feature_extractor = nn.Sequential(*layers)
             self.feature_size = self._get_feature_size(obs_shape)
         else:
-            self.is_image = len(obs_shape) == 3  # (C, H, W)
-            if self.is_image:
-                if neural_architecture_image == "impala":
-                    layers = [
-                        PixelPreprocess(),
-                        ImpalaBlock(obs_shape[0], 16),
-                        ImpalaBlock(16, 32),
-                        ImpalaBlock(32, 32),
-                        nn.Flatten(),
-                    ]
-                elif neural_architecture_image == "hadamax":
-                    layers = [
-                        PixelPreprocess(),
-                        HadamaxBlock(obs_shape[0], 16),
-                        HadamaxBlock(16, 32),
-                        HadamaxBlock(32, 32),
-                        nn.Flatten(),
-                    ]
-                else:
-                    raise ValueError(
-                        f"Error: unknown neural architecture: {neural_architecture_image}"
-                    )
-
-                self.feature_extractor = nn.Sequential(*layers)
-                self.feature_size = self._get_feature_size(obs_shape)
-            else:
-                self.feature_extractor = nn.Identity()
-                self.feature_size = int(np.prod(obs_shape))
+            self.feature_extractor = nn.Identity()
+            self.feature_size = int(np.prod(obs_shape))
 
     def _get_feature_size(self, obs_shape):
         """Pass a dummy tensor through CNN to compute feature size dynamically."""
@@ -347,21 +150,16 @@ class FeatureExtractor(nn.Module):
 class QNetwork(nn.Module):
     """Critic network (Q-function)"""
 
-    def __init__(self, cfg, neural_architecture_image, **kwargs):
+    def __init__(self):
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
-
         # Fully connected layers
         self.fc1 = nn.LazyLinear(256)
         self.fc2 = nn.LazyLinear(256)
         self.fc3 = nn.LazyLinear(1)
         self.mish = nn.Mish()
 
-    def forward(self, x, a):
-        x = self.feature_extractor(x)  # Extract features
-        x = torch.cat([x, a], dim=1)  # Concatenate state and action
+    def forward(self, z, a):
+        x = torch.cat([z, a], dim=1)  # Concatenate state and action
 
         x = self.mish(self.fc1(x))
         x = self.mish(self.fc2(x))
@@ -375,11 +173,8 @@ class Actor(nn.Module):
     LOG_STD_MAX = 2
     LOG_STD_MIN = -5
 
-    def __init__(self, cfg, neural_architecture_image, **kwargs):
+    def __init__(self, cfg):
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
         action_dim = np.prod(cfg["action_space_shape"])
 
         # Fully connected layers
@@ -404,10 +199,8 @@ class Actor(nn.Module):
             ),
         )
 
-    def forward(self, x):
-        x = self.feature_extractor(x)  # Extract features
-
-        x = self.relu(self.fc1(x))
+    def forward(self, z):
+        x = self.relu(self.fc1(z))
         x = self.relu(self.fc2(x))
 
         mean = self.fc_mean(x)
@@ -419,8 +212,8 @@ class Actor(nn.Module):
 
         return mean, log_std
 
-    def get_action(self, x):
-        mean, log_std = self(x)
+    def get_action(self, z):
+        mean, log_std = self.forward(z)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
 
@@ -436,43 +229,143 @@ class Actor(nn.Module):
         return action, log_prob, mean
 
 
-class Encoder(nn.Module):
-    """Handles both image-based and vector-based state inputs dynamically."""
+class ImpalaDecoder(nn.Module):
+    def __init__(self, latent_dim, enc_shape):
+        super().__init__()
 
-    def __init__(self, cfg, out_channels=32):
+        C, H, W = enc_shape
+        self.enc_shape = enc_shape
+
+        self.fc = nn.Linear(latent_dim, C * H * W)
+
+        self.block1 = nn.Sequential(
+            ResidualBlock(C),
+            ResidualBlock(C),
+            nn.Upsample(scale_factor=2, mode="nearest"),
+            nn.Conv2d(C, C, 3, padding=1),
+            nn.Mish(),
+        )
+
+        self.block2 = nn.Sequential(
+            ResidualBlock(C),
+            ResidualBlock(C),
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(C, 16, 3, padding=1),
+            nn.Mish(),
+        )
+
+        self.block3 = nn.Sequential(
+            ResidualBlock(16),
+            ResidualBlock(16),
+            nn.Upsample(scale_factor=2),
+            nn.Conv2d(16, C, 3, padding=1),
+        )
+
+    def forward(self, z):
+
+        B = z.shape[0]
+
+        x = self.fc(z)
+        x = x.view(B, *self.enc_shape)
+
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+
+        return x
+
+
+class AEImpala(nn.Module):
+    # https://github.com/denisyarats/pytorch_sac_ae/blob/master/sac_ae.py
+
+    def __init__(self, cfg):
         super().__init__()
 
         obs_shape = cfg["observation_space_shape"]
-        self.out_channels = out_channels
-        self.is_image = len(obs_shape) == 3  # (C, H, W)
-        if self.is_image:
-            layers = [
-                PixelPreprocess(),
-                ImpalaBlock(obs_shape[0], 16),
-                ImpalaBlock(16, 32),
-                ImpalaBlock(32, self.out_channels),
-                nn.Flatten(),
-            ]
+        lr = cfg.get("lr", 3e-4)
 
-            self.feature_extractor = nn.Sequential(*layers)
-            self.feature_size = self._get_feature_size(obs_shape)
-        else:
-            # simple vector
-            self.feature_extractor = self.fc = nn.Sequential(
-                nn.Linear(obs_shape[0], out_channels),
-                nn.ReLU(),
-                nn.Linear(out_channels, out_channels),
-                nn.ReLU(),
-            )
-            self.feature_size = out_channels
+        # -------------------
+        # Encoder
+        # -------------------
+        self.encoder = nn.Sequential(
+            PixelPreprocess(),
+            ImpalaBlock(obs_shape[0], 16),
+            ImpalaBlock(16, 32),
+            ImpalaBlock(32, 32),
+        )
 
-    def _get_feature_size(self, obs_shape):
-        """Pass a dummy tensor through CNN to compute feature size dynamically."""
+        self.flatten = nn.Flatten()
+
+        # infer encoder output shape
         with torch.no_grad():
-            dummy_input = torch.zeros(1, *obs_shape)
-            out = self.feature_extractor(dummy_input)
-            return int(np.prod(out.shape[1:]))
+            dummy = torch.zeros(1, *obs_shape)
+            h = self.encode(dummy)
+            self.enc_shape = h.shape[1:]  # (C,H,W)
+            self.feature_dim = int(np.prod(self.enc_shape))
+        # -------------------
+        # Decoder
+        # -------------------
+        self.decoder = ImpalaDecoder(
+            latent_dim=self.feature_dim,
+            enc_shape=obs_shape,
+        )
 
+        # -------------------
+        # Optimizers
+        # -------------------
+        self.encoder_optimizer = torch.optim.Adam(self.encoder.parameters(), lr=lr)
+
+        self.decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=lr)
+        self.decoder_latent_lambda = cfg.get("decoder_latent_lambda", 1e-6)
+
+    # -------------------
+    # Encode
+    # -------------------
+    def encode(self, x):
+
+        h = self.encoder(x)
+        z = self.flatten(h)
+        z = z.view(z.size(0), -1)
+        return z
+
+    # -------------------
+    # Forward
+    # -------------------
     def forward(self, x):
-        x = self.feature_extractor(x)
-        return x
+
+        z = self.encode(x)
+        rec = self.decoder(z)
+
+        return rec, z
+
+    def compute_reconstruction_loss(self, rec_obs, obs):
+
+        rec_loss = F.mse_loss(rec_obs, obs)
+
+        latent_loss = (0.5 * rec_obs.pow(2).sum(1)).mean()
+
+        loss = rec_loss + self.decoder_latent_lambda * latent_loss
+
+        self.encoder_optimizer.zero_grad()
+        self.decoder_optimizer.zero_grad()
+
+        loss.backward()
+
+        self.encoder_optimizer.step()
+        self.decoder_optimizer.step()
+        return loss
+
+
+if __name__ == "__main__":
+    B = 64
+    C = 4
+    H = 84
+    W = 84
+    cfg = {
+        "action_space_high": 1.0,
+        "action_space_low": 0.0,
+        "action_space_shape": 10,
+        "observation_space_shape": [C, H, W],
+        "neural_architecture_image": "impala",
+    }
+    image = torch.rand((B, C, H, W))
