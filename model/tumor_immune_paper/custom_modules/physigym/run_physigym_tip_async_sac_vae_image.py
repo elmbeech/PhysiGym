@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 # Your project imports
 from vectorized_tip import vec_envs
-from nn import Actor, QNetwork, FeatureExtractor, PixelPreprocess, AEImpala
+from nn import Actor, QNetwork, PixelPreprocess, AEImpala
 from rb_tip import ReplayBuffer
 
 from torch.multiprocessing import Event, Queue
@@ -65,14 +65,11 @@ def actor_process(
         * d_arg["rl"]["train_total_timesteps"]
     )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-    encoder_local = FeatureExtractor(
-        cfg=d_arg_env,
-        neural_architecture_image=d_arg.get("neural_architecture_image", "impala"),
-    ).cpu()
+    ae_local = AEImpala(cfg=d_arg_env).cpu()
     actor_local = Actor(d_arg_env).cpu()
     obs_nn = torch.from_numpy(obs).cpu()
 
-    _, _, _ = actor_local.get_action(encoder_local(obs_nn))
+    _, _, _ = actor_local.get_action(ae_local.encode(obs_nn))
     actor_local.eval()
     num_envs = envs.num_envs
     pending_mode = "train"
@@ -95,10 +92,10 @@ def actor_process(
                 if "scalars" not in d_arg_env["observation_mode"]:
                     new_params_encoder = encoder_queue.get_nowait()
                     try:
-                        encoder_local.load_state_dict(new_params_encoder)
+                        ae_local.encoder.load_state_dict(new_params_encoder)
                     except Exception:
                         # if state_dict was saved on CUDA, map_location might be required
-                        encoder_local.load_state_dict(
+                        ae_local.encoder.load_state_dict(
                             {k: v.cpu() for k, v in new_params_encoder.items()}
                         )
         except queue.Empty:
@@ -113,7 +110,7 @@ def actor_process(
             # Inference
             with torch.no_grad():
                 obs = torch.from_numpy(obs).cpu()
-                obs_nn = encoder_local(obs)
+                obs_nn = ae_local.encode(obs)
                 actions_tensor, _, _ = actor_local.get_action(obs_nn)
                 actions = actions_tensor.cpu().numpy()
 
@@ -255,11 +252,10 @@ def run_async_sac(d_arg):
         device=device,
         dtype=torch.float32,
     )
-    dummy_state_encoded = ae.encoder(dummy_state)
+    dummy_state_encoded = ae.encode(dummy_state)
 
     with torch.no_grad():
         actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
-
         _ = qf1(dummy_state_encoded, actions_tensor)
         _ = qf2(dummy_state_encoded, actions_tensor)
 
@@ -618,7 +614,7 @@ if __name__ == "__main__":
 
     # === Experiment Metadata ===
     parser.add_argument(
-        "--name", default="async_sac_tip_train_test", help="Experiment name"
+        "--name", default="async_sac_tip_train_test_vae", help="Experiment name"
     )
     parser.add_argument(
         "--wandb", default="true", help="Log to Weights & Biases? (true/false)"
@@ -658,7 +654,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TRAIN_TEST_TIP_15min",
+        "project": "SAC_ASYNC_TRAIN_TEST_TIP_15min_VAE",
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,
