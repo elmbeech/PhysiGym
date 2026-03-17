@@ -373,19 +373,22 @@ def run_async_sac(d_arg):
 
                 # ---------- Encode once ----------
                 rec, z = ae(state)
-                z = z.view(z.size(0), -1)
+
+                # RL branch: detach to avoid memory issues
+                z_rl = z.view(z.size(0), -1).detach()
+
+                # Next state encoding (for target Q)
                 with torch.no_grad():
                     rec_next, z_next = ae(next_state)
-                    z_next = z_next.view(z.size(0), -1)
+                    z_next = z_next.view(z_next.size(0), -1)
 
-                state_pixels = PixelPreprocess(state)
+                state_pixels = state.div(255.0)
+
                 # ---------- Target Q ----------
                 with torch.no_grad():
                     next_actions, next_log_pi, _ = actor.get_action(z_next)
-
                     q1_next = qf1_target(z_next, next_actions)
                     q2_next = qf2_target(z_next, next_actions)
-
                     min_q_next = torch.min(q1_next, q2_next) - alpha * next_log_pi
                     next_q = (
                         reward.flatten()
@@ -395,23 +398,20 @@ def run_async_sac(d_arg):
                     )
 
                 # ---------- Critic ----------
-                q1 = qf1(z, action).view(-1)
-                q2 = qf2(z, action).view(-1)
-
+                q1 = qf1(z_rl, action).view(-1)
+                q2 = qf2(z_rl, action).view(-1)
                 qf_loss = F.mse_loss(q1, next_q) + F.mse_loss(q2, next_q)
 
-                # Zero gradients for ALL optimizers that will update
+                # Zero gradients for all optimizers that will update
                 q_optimizer.zero_grad()
-                ae.encoder_optimizer.zero_grad()
-
-                qf_loss.backward()  # Gradients flow to both Q-heads AND encoder
-
-                # Step both optimizers
+                # NOTE: encoder not part of RL gradient, so no need to zero encoder optimizer here
+                qf_loss.backward()
                 q_optimizer.step()  # Updates Q-heads
-                ae.encoder_optimizer.step()
 
                 grad_steps += 1
 
+                # ---------- AE update ----------
+                # Update encoder+decoder separately with reconstruction loss
                 ae.compute_reconstruction_loss(rec, state_pixels)
 
                 # Policy & alpha update

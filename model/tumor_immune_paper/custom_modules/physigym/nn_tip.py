@@ -230,48 +230,34 @@ class Actor(nn.Module):
 
 
 class ImpalaDecoder(nn.Module):
-    def __init__(self, latent_dim, enc_shape):
+    def __init__(self, latent_dim, obs_shape):
         super().__init__()
+        C_out, H_out, W_out = obs_shape
+        self.obs_shape = obs_shape
 
-        C, H, W = enc_shape
-        self.enc_shape = enc_shape
-
-        self.fc = nn.Linear(latent_dim, C * H * W)
+        self.fc = nn.Linear(latent_dim, 32 * 8 * 8)  # small hidden map
 
         self.block1 = nn.Sequential(
-            ResidualBlock(C),
-            ResidualBlock(C),
-            nn.Upsample(scale_factor=2, mode="nearest"),
-            nn.Conv2d(C, C, 3, padding=1),
+            nn.ConvTranspose2d(32, 16, 4, stride=2, padding=1),  # upsample
             nn.Mish(),
         )
-
         self.block2 = nn.Sequential(
-            ResidualBlock(C),
-            ResidualBlock(C),
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(C, 16, 3, padding=1),
+            nn.ConvTranspose2d(16, 16, 4, stride=2, padding=1),
             nn.Mish(),
         )
-
         self.block3 = nn.Sequential(
-            ResidualBlock(16),
-            ResidualBlock(16),
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(16, C, 3, padding=1),
+            nn.ConvTranspose2d(16, C_out, 4, stride=2, padding=1),
         )
+        self.final_resize = nn.AdaptiveAvgPool2d((H_out, W_out))
 
     def forward(self, z):
-
-        B = z.shape[0]
-
-        x = self.fc(z)
-        x = x.view(B, *self.enc_shape)
-
+        B = z.size(0)
+        x = self.fc(z)  # (B, 32*8*8)
+        x = x.view(B, 32, 8, 8)  # reshape to pseudo 3D
         x = self.block1(x)
         x = self.block2(x)
         x = self.block3(x)
-
+        x = self.final_resize(x)
         return x
 
 
@@ -299,17 +285,16 @@ class AEImpala(nn.Module):
         # infer encoder output shape
         with torch.no_grad():
             dummy = torch.zeros(1, *obs_shape)
-            h = self.encode(dummy)
-            self.enc_shape = h.shape[1:]  # (C,H,W)
+            h = self.encoder(dummy)  # Encoder output: (B, C_enc, H_enc, W_enc)
+            self.enc_shape = h.shape[1:]  # (C_enc, H_enc, W_enc)
             self.feature_dim = int(np.prod(self.enc_shape))
         # -------------------
         # Decoder
         # -------------------
         self.decoder = ImpalaDecoder(
             latent_dim=self.feature_dim,
-            enc_shape=obs_shape,
+            obs_shape=obs_shape,
         )
-
         # -------------------
         # Optimizers
         # -------------------
