@@ -68,8 +68,9 @@ def actor_process(
     ae_local = AEImpala(cfg=d_arg_env).cpu()
     actor_local = Actor(d_arg_env).cpu()
     obs_nn = torch.from_numpy(obs).cpu()
-
-    _, _, _ = actor_local.get_action(ae_local.encode(obs_nn))
+    z = ae_local.encode(obs_nn)
+    z = z.view(z.size(0), -1)
+    _, _, _ = actor_local.get_action(z)
     actor_local.eval()
     num_envs = envs.num_envs
     pending_mode = "train"
@@ -110,8 +111,9 @@ def actor_process(
             # Inference
             with torch.no_grad():
                 obs = torch.from_numpy(obs).cpu()
-                obs_nn = ae_local.encode(obs)
-                actions_tensor, _, _ = actor_local.get_action(obs_nn)
+                z = ae_local.encode(obs)
+                z = z.view(z.size(0), -1)
+                actions_tensor, _, _ = actor_local.get_action(z)
                 actions = actions_tensor.cpu().numpy()
 
         # Step envs
@@ -253,7 +255,7 @@ def run_async_sac(d_arg):
         dtype=torch.float32,
     )
     dummy_state_encoded = ae.encode(dummy_state)
-
+    dummy_state_encoded = dummy_state_encoded.view(dummy_state_encoded.size(0), -1)
     with torch.no_grad():
         actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
         _ = qf1(dummy_state_encoded, actions_tensor)
@@ -371,8 +373,10 @@ def run_async_sac(d_arg):
 
                 # ---------- Encode once ----------
                 rec, z = ae(state)
+                z = z.view(z.size(0), -1)
                 with torch.no_grad():
                     rec_next, z_next = ae(next_state)
+                    z_next = z_next.view(z.size(0), -1)
 
                 state_pixels = PixelPreprocess(state)
                 # ---------- Target Q ----------
@@ -603,7 +607,7 @@ if __name__ == "__main__":
         "--num_envs", type=int, default=14, help="Parallel PhysiCell instances"
     )
     parser.add_argument(
-        "--buffer_size", type=int, default=int(2.5e5), help="Replay buffer size"
+        "--buffer_size", type=int, default=int(1e5), help="Replay buffer size"
     )
     parser.add_argument(
         "--batch_size_multiplier",

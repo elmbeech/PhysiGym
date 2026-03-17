@@ -291,7 +291,7 @@ class AEImpala(nn.Module):
             PixelPreprocess(),
             ImpalaBlock(obs_shape[0], 16),
             ImpalaBlock(16, 32),
-            ImpalaBlock(32, 32),
+            ImpalaBlock(32, 8),
         )
 
         self.flatten = nn.Flatten()
@@ -325,7 +325,6 @@ class AEImpala(nn.Module):
 
         h = self.encoder(x)
         z = self.flatten(h)
-        z = z.view(z.size(0), -1)
         return z
 
     # -------------------
