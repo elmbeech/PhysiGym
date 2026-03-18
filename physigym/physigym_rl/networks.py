@@ -10,14 +10,14 @@ import numpy as np
 
 class PixelPreprocess(nn.Module):
     """
-    Normalizes pixel observations to [-0.5, 0.5].
+    Normalizes pixel observations to [0.0, 1.0].
     """
 
     def __init__(self):
         super().__init__()
 
     def forward(self, x):
-        return x.div(255.0).sub(0.5)
+        return x.div(255.0)
 
 
 class ResidualBlock(nn.Module):
@@ -227,3 +227,129 @@ class Actor(nn.Module):
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+
+
+class ImpalaDecoder(nn.Module):
+    def __init__(self, latent_dim, obs_shape):
+        super().__init__()
+        C_out, H_out, W_out = obs_shape
+        self.obs_shape = obs_shape
+
+        self.fc = nn.Linear(latent_dim, 32 * 8 * 8)  # small hidden map
+
+        self.block1 = nn.Sequential(
+            nn.ConvTranspose2d(32, 16, 4, stride=2, padding=1),  # upsample
+            nn.Mish(),
+        )
+        self.block2 = nn.Sequential(
+            nn.ConvTranspose2d(16, 16, 4, stride=2, padding=1),
+            nn.Mish(),
+        )
+        self.block3 = nn.Sequential(
+            nn.ConvTranspose2d(16, C_out, 4, stride=2, padding=1),
+        )
+        self.final_resize = nn.AdaptiveAvgPool2d((H_out, W_out))
+
+    def forward(self, z):
+        B = z.size(0)
+        x = self.fc(z)  # (B, 32*8*8)
+        x = x.view(B, 32, 8, 8)  # reshape to pseudo 3D
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.final_resize(x)
+        return x
+
+
+class AEImpala(nn.Module):
+    # https://github.com/denisyarats/pytorch_sac_ae/blob/master/sac_ae.py
+
+    def __init__(self, cfg):
+        super().__init__()
+
+        obs_shape = cfg["observation_space_shape"]
+        lr = cfg.get("lr", 3e-4)
+
+        # -------------------
+        # Encoder
+        # -------------------
+        self.encoder = nn.Sequential(
+            PixelPreprocess(),
+            ImpalaBlock(obs_shape[0], 16),
+            ImpalaBlock(16, 32),
+            ImpalaBlock(32, 8),
+        )
+
+        self.flatten = nn.Flatten()
+
+        # infer encoder output shape
+        with torch.no_grad():
+            dummy = torch.zeros(1, *obs_shape)
+            h = self.encoder(dummy)  # Encoder output: (B, C_enc, H_enc, W_enc)
+            self.enc_shape = h.shape[1:]  # (C_enc, H_enc, W_enc)
+            self.feature_dim = int(np.prod(self.enc_shape))
+        # -------------------
+        # Decoder
+        # -------------------
+        self.decoder = ImpalaDecoder(
+            latent_dim=self.feature_dim,
+            obs_shape=obs_shape,
+        )
+        # -------------------
+        # Optimizers
+        # -------------------
+        self.encoder_optimizer = torch.optim.Adam(self.encoder.parameters(), lr=lr)
+
+        self.decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=lr)
+        self.decoder_latent_lambda = cfg.get("decoder_latent_lambda", 1e-6)
+
+    # -------------------
+    # Encode
+    # -------------------
+    def encode(self, x):
+
+        h = self.encoder(x)
+        z = self.flatten(h)
+        return z
+
+    # -------------------
+    # Forward
+    # -------------------
+    def forward(self, x):
+
+        z = self.encode(x)
+        rec = self.decoder(z)
+
+        return rec, z
+
+    def compute_reconstruction_loss(self, rec_obs, obs):
+
+        rec_loss = F.mse_loss(rec_obs, obs)
+
+        latent_loss = (0.5 * rec_obs.pow(2).sum(1)).mean()
+
+        loss = rec_loss + self.decoder_latent_lambda * latent_loss
+
+        self.encoder_optimizer.zero_grad()
+        self.decoder_optimizer.zero_grad()
+
+        loss.backward()
+
+        self.encoder_optimizer.step()
+        self.decoder_optimizer.step()
+        return loss
+
+
+if __name__ == "__main__":
+    B = 64
+    C = 4
+    H = 84
+    W = 84
+    cfg = {
+        "action_space_high": 1.0,
+        "action_space_low": 0.0,
+        "action_space_shape": 10,
+        "observation_space_shape": [C, H, W],
+        "neural_architecture_image": "impala",
+    }
+    image = torch.rand((B, C, H, W))
