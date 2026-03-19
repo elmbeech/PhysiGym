@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, global_mean_pool
 import numpy as np
+from torch.distributions import Normal, kl_divergence
 ###########################
 # Classes Neural Networks #
 ###########################
@@ -337,7 +338,101 @@ class AEImpala(nn.Module):
 
         self.encoder_optimizer.step()
         self.decoder_optimizer.step()
-        return loss
+        return {
+            "loss": loss.item(),
+            "rec_loss": rec_loss.item(),
+            "latent_loss": latent_loss.item(),
+        }
+
+
+class VAEImpala(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+
+        obs_shape = cfg["observation_space_shape"]
+        self.latent_dim = cfg.get("latent_dim", 32)  # The size of the bottleneck
+        lr = cfg.get("lr", 3e-4)
+
+        # -------------------
+        # Encoder (Shared Backbone)
+        # -------------------
+        self.encoder_backbone = nn.Sequential(
+            # PixelPreprocess(), # Assuming this handles uint8 to float32 [0, 1]
+            ImpalaBlock(obs_shape[0], 16),
+            ImpalaBlock(16, 32),
+            ImpalaBlock(32, 8),
+            nn.Flatten(),
+        )
+
+        # Infer backbone output size
+        with torch.no_grad():
+            dummy = torch.zeros(1, *obs_shape)
+            backbone_out = self.encoder_backbone(dummy)
+            self.backbone_dim = backbone_out.shape[1]
+
+        # VAE Heads: Mapping backbone to Normal Distribution parameters
+        self.fc_mu = nn.Linear(self.backbone_dim, self.latent_dim)
+        self.fc_std = nn.Linear(self.backbone_dim, self.latent_dim)
+
+        # -------------------
+        # Decoder
+        # -------------------
+        # Note: Decoder now takes 'latent_dim' instead of 'feature_dim'
+        self.decoder = ImpalaDecoder(
+            latent_dim=self.latent_dim,
+            obs_shape=obs_shape,
+        )
+
+        # -------------------
+        # Optimizers
+        # -------------------
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+
+        # Beta scales the KL divergence (Beta-VAE)
+        self.beta = cfg.get("beta", 1.0)
+
+    def encode(self, x):
+        hidden = self.encoder_backbone(x)
+        mu = self.fc_mu(hidden)
+        # We use softplus to ensure standard deviation is positive
+        std = F.softplus(self.fc_std(hidden)) + 1e-6
+
+        # Create the distribution
+        dist = Normal(mu, std)
+        return dist
+
+    def forward(self, x):
+        dist = self.encode(x)
+
+        # Reparameterization trick: sample z = mu + std * epsilon
+        z = dist.rsample()
+
+        rec = self.decoder(z)
+        return rec, dist
+
+    def compute_reconstruction_loss(self, rec_obs, obs, dist):
+
+        # 2. Reconstruction Loss (Likelihood)
+        # Using MSE assumes a Gaussian observation model
+        rec_loss = F.mse_loss(rec_obs, obs)
+
+        # 3. KL Divergence Loss
+        # Measures how much 'dist' deviates from a standard Normal(0, 1)
+        prior = Normal(torch.zeros_like(dist.loc), torch.ones_like(dist.scale))
+        kl_loss = kl_divergence(dist, prior).sum(dim=-1).mean()
+
+        total_loss = rec_loss + (self.beta * kl_loss)
+
+        # 4. Update
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        self.optimizer.step()
+
+        return {
+            "loss": total_loss.item(),
+            "rec_loss": rec_loss.item(),
+            "kl_loss": kl_loss.item(),
+        }
 
 
 if __name__ == "__main__":
@@ -353,4 +448,3 @@ if __name__ == "__main__":
         "neural_architecture_image": "impala",
     }
     image = torch.rand((B, C, H, W))
-    
