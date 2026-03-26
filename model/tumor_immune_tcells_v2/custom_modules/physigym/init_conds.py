@@ -269,15 +269,8 @@ def generate_synthetic_network_field(
 # CSV + Plot
 # ============================================================
 def generate_initial_condition(
-    csv_path, mode, x_min, x_max, y_min, y_max, cell_2_fraction, params, seed=42
+    csv_path, mode, x_min, x_max, y_min, y_max, params, seed=42
 ):
-    if cell_2_fraction is None:
-        cell_2_fraction = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    cell_2_fraction = (
-        np.random.choice(cell_2_fraction)
-        if isinstance(cell_2_fraction, (list, np.ndarray))
-        else cell_2_fraction
-    )
     set_seed(seed)
     bounds = ((x_min, x_max), (y_min, y_max))
     if isinstance(mode, (list, tuple)):
@@ -346,7 +339,6 @@ if __name__ == "__main__":
     d_arg_generation = {
         "csv_path": None,
         "params": params,
-        "cell_2_fraction": None,
         "x_min": x_min,
         "x_max": x_max,
         "y_min": y_min,
