@@ -1,0 +1,8 @@
+tumor,pressure,decreases,cycle entry,0,5,3,0
+macrophage,contact with tumor,decreases,migration speed,0.3,0.1,2,0
+T_cell,contact with tumor,decreases,migration speed,1e-2,1e-1,4,0
+T_cell,pro-tumoral factor,decreases,attack tumor,0.0,5e-2,8,0
+tumor,damage,increases,apoptosis,0.1,1,2,0
+macrophage,drug_1,increases,anti-tumoral factor secretion,1.,0.5,2,0
+macrophage,drug_1,decreases,pro-tumoral factor secretion,0.,0.5,4,0
+macrophage,il-10,decreases,anti-tumoral factor secretion,0.,0.5,4,0
