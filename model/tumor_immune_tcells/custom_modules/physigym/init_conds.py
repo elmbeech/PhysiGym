@@ -374,6 +374,11 @@ if __name__ == "__main__":
                 "threshold": 0.02 * i,
                 "number_cells": 128,
             },
+            "T_cell": {
+                "correlation_length": 35,
+                "threshold": 0.02 * i,
+                "number_cells": 42,
+            },
         }
         df, type_mode = generate_initial_condition(**d_arg_generation)
         plot_cells(df, f"{out}/cells_{i * 0.02}.png")

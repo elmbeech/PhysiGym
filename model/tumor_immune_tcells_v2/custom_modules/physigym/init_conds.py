@@ -114,7 +114,7 @@ def circular_mode(params, bounds):
     )
 
     cx1, cy1 = ellipse_points(
-        params["M1"]["number_cells"],
+        params["macrophage"]["number_cells"],
         params["r1_c"] * hw,
         params["r2_c"] * hh,
         (cx, cy),
@@ -134,7 +134,7 @@ def circular_mode(params, bounds):
     return pd.concat(
         [
             df_cells(tx, ty, "tumor"),
-            df_cells(cx1, cy1, "M1"),
+            df_cells(cx1, cy1, "macrophage"),
             df_cells(dx1, dy1, "T_cell"),
         ]
     )
@@ -142,7 +142,7 @@ def circular_mode(params, bounds):
 
 def random_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
-    nb_cell_1 = params["M1"]["number_cells"]
+    nb_cell_1 = params["macrophage"]["number_cells"]
 
     tumor = df_cells(
         np.random.uniform(
@@ -154,10 +154,10 @@ def random_mode(params, bounds):
         "tumor",
     )
 
-    m1 = df_cells(
+    macrophage = df_cells(
         np.random.uniform(bounds[0][0], bounds[0][1], nb_cell_1),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
-        "M1",
+        "macrophage",
     )
 
     t_cell = df_cells(
@@ -166,12 +166,12 @@ def random_mode(params, bounds):
         "T_cell",
     )
 
-    return pd.concat([tumor, m1, t_cell])
+    return pd.concat([tumor, macrophage, t_cell])
 
 
 def rectangle_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
-    nb_cell_1 = params["M1"]["number_cells"]
+    nb_cell_1 = params["macrophage"]["number_cells"]
     value_tumor = random.uniform(0.2, 0.4)
     value_cell_1 = random.uniform(0.7, 0.9)
 
@@ -185,10 +185,10 @@ def rectangle_mode(params, bounds):
         "tumor",
     )
 
-    m1 = df_cells(
+    macrophage = df_cells(
         np.random.uniform(bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1),
         np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
-        "M1",
+        "macrophage",
     )
 
     t_cell = df_cells(
@@ -197,7 +197,7 @@ def rectangle_mode(params, bounds):
         "T_cell",
     )
 
-    return pd.concat([tumor, m1, t_cell])
+    return pd.concat([tumor, macrophage, t_cell])
 
 
 def generate_synthetic_network_field(
@@ -306,20 +306,12 @@ def generate_initial_condition(
     else:
         raise ValueError(mode)
 
-    cell1_pos = np.flatnonzero(df["type"].values == "M1")
-    df.iloc[
-        np.random.choice(
-            cell1_pos, int(cell_2_fraction * len(cell1_pos)), replace=False
-        ),
-        df.columns.get_loc("type"),
-    ] = "M2"
-    df = df.drop_duplicates(subset=["x", "y"], keep=False)
     df.to_csv(csv_path, index=False, float_format="%.6f")
     return df, mode
 
 
 def plot_cells(df, path):
-    colors = {"tumor": "grey", "M1": "blue", "M2": "red", "T_cell": "green"}
+    colors = {"tumor": "grey", "macrophage": "blue", "T_cell": "red"}
     plt.figure(figsize=(6, 6))
     for t, c in colors.items():
         s = df[df.type == t]
@@ -343,7 +335,11 @@ if __name__ == "__main__":
     modes = ["network_field"]
     params = {
         "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 512},
-        "M1": {"correlation_length": 35, "threshold": 0.55, "number_cells": 128},
+        "macrophage": {
+            "correlation_length": 35,
+            "threshold": 0.55,
+            "number_cells": 128,
+        },
         "T_cell": {"correlation_length": 35, "threshold": 0.55, "number_cells": 42},
     }
 
@@ -369,10 +365,15 @@ if __name__ == "__main__":
                 "threshold": 0.02 * i,
                 "number_cells": 512,
             },
-            "M1": {
+            "macrophage": {
                 "correlation_length": 35,
                 "threshold": 0.02 * i,
                 "number_cells": 128,
+            },
+            "T_cell": {
+                "correlation_length": 35,
+                "threshold": 0.02 * i,
+                "number_cells": 42,
             },
         }
         df, type_mode = generate_initial_condition(**d_arg_generation)
