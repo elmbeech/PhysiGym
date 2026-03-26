@@ -65,7 +65,7 @@ def actor_process(
         * d_arg["rl"]["train_total_timesteps"]
     )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-    ae_local = AEImpala(cfg=d_arg_env).cpu()
+    ae_local = VAEImpala(cfg=d_arg_env).cpu()
     actor_local = Actor(d_arg_env).cpu()
     obs_nn = torch.from_numpy(obs).cpu()
     z = ae_local.encode(obs_nn)
