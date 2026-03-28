@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 import shutil
-from init_conds import generate_initial_condition
+from init_conds_v2 import generate_initial_condition
 from pathlib import Path
 
 
@@ -167,14 +167,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
             - self.w_amount * drug_t
             - self.w_increase * drug_increase
         )
+        reward -= 100 if terminated and info["number_tumor"] > 100 else 0
 
         data = {
             "step": self.env.unwrapped.step_episode,
             "reward": reward,
             "mean_drugs": drug_t,
             "number_tumor": info["number_tumor"],
-            "number_m_1": info["number_m_1"],
-            "number_m_2": info["number_m_2"],
             "train_test": info["train_test"],
         }
 
