@@ -143,6 +143,7 @@ def circular_mode(params, bounds):
 def random_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
     nb_cell_1 = params["M1"]["number_cells"]
+    nb_t_cell = params["T_cell"]["number_cells"]
 
     tumor = df_cells(
         np.random.uniform(
@@ -161,8 +162,8 @@ def random_mode(params, bounds):
     )
 
     t_cell = df_cells(
-        np.random.uniform(bounds[0][0], bounds[0][1], nb_cell_1),
-        np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
+        np.random.uniform(bounds[0][0], bounds[0][1], nb_t_cell),
+        np.random.uniform(bounds[1][0], bounds[1][1], nb_t_cell),
         "T_cell",
     )
 
@@ -172,8 +173,10 @@ def random_mode(params, bounds):
 def rectangle_mode(params, bounds):
     nb_tumor_cells = params["tumor"]["number_cells"]
     nb_cell_1 = params["M1"]["number_cells"]
+    nb_t_cell = params["T_cell"]["number_cells"]
     value_tumor = random.uniform(0.2, 0.4)
     value_cell_1 = random.uniform(0.7, 0.9)
+    value_t_cell = random.uniform(0.7, 0.9)
 
     tumor = df_cells(
         np.random.uniform(
@@ -192,8 +195,8 @@ def rectangle_mode(params, bounds):
     )
 
     t_cell = df_cells(
-        np.random.uniform(bounds[0][1] * value_cell_1, bounds[0][1], nb_cell_1),
-        np.random.uniform(bounds[1][0], bounds[1][1], nb_cell_1),
+        np.random.uniform(bounds[0][1] * value_cell_1, bounds[0][1], nb_t_cell),
+        np.random.uniform(bounds[1][0], bounds[1][1], nb_t_cell),
         "T_cell",
     )
 
@@ -269,15 +272,8 @@ def generate_synthetic_network_field(
 # CSV + Plot
 # ============================================================
 def generate_initial_condition(
-    csv_path, mode, x_min, x_max, y_min, y_max, M2_fraction, params, seed=42
+    csv_path, mode, x_min, x_max, y_min, y_max, params, seed=42
 ):
-    if M2_fraction is None:
-        M2_fraction = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    M2_fraction = (
-        np.random.choice(M2_fraction)
-        if isinstance(M2_fraction, (list, np.ndarray))
-        else M2_fraction
-    )
     set_seed(seed)
     bounds = ((x_min, x_max), (y_min, y_max))
     if isinstance(mode, (list, tuple)):
@@ -306,14 +302,6 @@ def generate_initial_condition(
     else:
         raise ValueError(mode)
 
-    cell1_pos = np.flatnonzero(df["type"].values == "M1")
-    df.iloc[
-        np.random.choice(
-            cell1_pos, int(M2_fraction * len(cell1_pos)), replace=False
-        ),
-        df.columns.get_loc("type"),
-    ] = "M2"
-    df = df.drop_duplicates(subset=["x", "y"], keep=False)
     df.to_csv(csv_path, index=False, float_format="%.6f")
     return df, mode
 
