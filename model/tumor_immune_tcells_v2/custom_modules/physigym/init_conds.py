@@ -3,7 +3,6 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.neighbors import NearestNeighbors
 from math import sqrt
 from scipy.ndimage import gaussian_filter
 # ============================================================
