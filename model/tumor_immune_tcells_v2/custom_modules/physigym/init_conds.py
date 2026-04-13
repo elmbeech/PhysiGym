@@ -353,7 +353,7 @@ def generate_initial_condition(
 
 
 def plot_cells(df, path):
-    colors = {"tumor": "grey", "Macrophage": "blue", "M2": "red", "T_cell": "green"}
+    colors = {"tumor": "grey", "Macrophage": "blue", "T_cell": "green"}
     plt.figure(figsize=(6, 6))
     for t, c in colors.items():
         s = df[df.type == t]
@@ -376,13 +376,13 @@ if __name__ == "__main__":
 
     modes = ["network_field"]
     params = {
-        "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 512},
+        "tumor": {"correlation_length": 35, "threshold": 0.55, "number_cells": 256},
         "Macrophage": {
             "correlation_length": 35,
             "threshold": 0.55,
-            "number_cells": 128,
+            "number_cells": 64,
         },
-        "T_cell": {"correlation_length": 35, "threshold": 0.55, "number_cells": 42},
+        "T_cell": {"correlation_length": 35, "threshold": 0.55, "number_cells": 32},
     }
 
     d_arg_generation = {

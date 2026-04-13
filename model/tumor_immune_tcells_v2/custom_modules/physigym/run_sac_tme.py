@@ -556,11 +556,10 @@ if __name__ == "__main__":
 
     # === Initialization & Cells ===
     parser.add_argument("--tumor", type=int, default=256, help="Initial tumor size")
-    parser.add_argument("--M_1", type=int, default=64, help="Number of M1")
-    parser.add_argument("--T_cells", type=int, default=32, help="Number of Tcells")
     parser.add_argument(
-        "--M2_fraction", type=float, default=None, help="Fraction of M2"
+        "--Macrophage", type=int, default=64, help="Number of Macrophage"
     )
+    parser.add_argument("--T_cells", type=int, default=32, help="Number of Tcells")
     parser.add_argument(
         "--frequence_episode_test",
         type=float,
@@ -667,11 +666,8 @@ if __name__ == "__main__":
 
     d_arg_generation = {
         "params": params,
-        "M2_fraction": [args.M2_fraction]
-        if args.M2_fraction is not None
-        else [0.0, 1.0],
         "seed": d_arg_simulation["seed"],
-        "mode_train": ["network_field","rectangle"],
+        "mode_train": ["network_field", "rectangle"],
         "mode_test": ["random", "circular"],
     }
     # === Final d_arg ===
