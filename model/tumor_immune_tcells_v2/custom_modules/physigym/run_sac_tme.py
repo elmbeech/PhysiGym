@@ -352,20 +352,13 @@ def run_async_sac(d_arg):
                     stat = stats_queue.get_nowait()
                 except queue.Empty:
                     break
-                if stat["train_test"]:
-                    log_dict = {
-                        "samples_drained": drained,
-                        "charts/return": stat["episode_return"],
-                        "charts/length": stat["episode_length"],
-                        "charts/step": stat["step"],
-                        "charts/grad_steps": grad_steps,
-                    }
-                else:
-                    log_dict = {
-                        "samples_drained": drained,
-                        "charts/test_return": stat["episode_return"],
-                        "charts/test_length": stat["episode_length"],
-                    }
+                log_dict = {
+                    "samples_drained": drained,
+                    f"charts/{stat['train_test']}_return": stat["episode_return"],
+                    f"charts/{stat['train_test']}_length": stat["episode_length"],
+                    "charts/step": stat["step"],
+                    "charts/grad_steps": grad_steps,
+                }
 
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict)
