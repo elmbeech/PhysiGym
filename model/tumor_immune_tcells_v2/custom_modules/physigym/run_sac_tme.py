@@ -359,7 +359,6 @@ def run_async_sac(d_arg):
                     "charts/step": stat["step"],
                     "charts/grad_steps": grad_steps,
                 }
-
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict)
                 else:
@@ -645,10 +644,10 @@ if __name__ == "__main__":
             "threshold": 0.55,
             "number_cells": args.tumor,
         },
-        "M1": {
+        "Macrophage": {
             "correlation_length": 45,
             "threshold": 0.55,
-            "number_cells": args.M_1,
+            "number_cells": args.Macrophage,
         },
         "T_cell": {
             "correlation_length": 45,
