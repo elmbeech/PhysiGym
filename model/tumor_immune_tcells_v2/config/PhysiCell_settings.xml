@@ -23,7 +23,7 @@
     </domain>
 
     <overall>
-        <max_time units="min">7200.0</max_time>
+        <max_time units="min">10080.0</max_time>
         <time_units>min</time_units>
         <space_units>micron</space_units>
         <dt_diffusion units="min">0.01</dt_diffusion>
@@ -66,7 +66,7 @@
         <variable name="anti-tumoral factor" units="dimensionless" ID="0">
             <physical_parameter_set>
                 <diffusion_coefficient units="micron^2/min">1</diffusion_coefficient>
-                <decay_rate units="1/min">0.1</decay_rate>
+                <decay_rate units="1/min">0.05</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
@@ -82,38 +82,38 @@
         <variable name="pro-tumoral factor" units="dimensionless" ID="1">
             <physical_parameter_set>
                 <diffusion_coefficient units="micron^2/min">1</diffusion_coefficient>
-                <decay_rate units="1/min">0.1</decay_rate>
+                <decay_rate units="1/min">0.05</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0</initial_condition>
-            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
+            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
-                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
-                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
-                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
-                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
-                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmin" enabled="False">0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="drug_1" units="dimensionless" ID="2">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">10000</diffusion_coefficient>
+                <diffusion_coefficient units="micron^2/min">0</diffusion_coefficient>
                 <decay_rate units="1/min">1e-2</decay_rate>
             </physical_parameter_set>
-            <initial_condition units="dimensionless">1</initial_condition>
-            <Dirichlet_boundary_condition units="dimensionless" enabled="True">1</Dirichlet_boundary_condition>
+            <initial_condition units="dimensionless">0</initial_condition>
+            <Dirichlet_boundary_condition units="dimensionless" enabled="True">0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="True">1</boundary_value>
-                <boundary_value ID="xmax" enabled="True">1</boundary_value>
-                <boundary_value ID="ymin" enabled="True">1</boundary_value>
-                <boundary_value ID="ymax" enabled="True">1</boundary_value>
-                <boundary_value ID="zmin" enabled="False">1</boundary_value>
-                <boundary_value ID="zmax" enabled="False">1</boundary_value>
+                <boundary_value ID="xmin" enabled="True">0</boundary_value>
+                <boundary_value ID="xmax" enabled="True">0</boundary_value>
+                <boundary_value ID="ymin" enabled="True">0</boundary_value>
+                <boundary_value ID="ymax" enabled="True">0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="tumor_molecule" units="dimensionless" ID="3">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">1</diffusion_coefficient>
+                <diffusion_coefficient units="micron^2/min">2</diffusion_coefficient>
                 <decay_rate units="1/min">0.1</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
@@ -404,13 +404,13 @@
                     <substrate name="anti-tumoral factor">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <uptake_rate units="1/min">1.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="pro-tumoral factor">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
-                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <uptake_rate units="1/min">1.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="drug_1">
@@ -565,13 +565,13 @@
                 </motility>
                 <secretion>
                     <substrate name="anti-tumoral factor">
-                        <secretion_rate units="1/min">0.5</secretion_rate>
+                        <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="pro-tumoral factor">
-                        <secretion_rate units="1/min">0.5</secretion_rate>
+                        <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
