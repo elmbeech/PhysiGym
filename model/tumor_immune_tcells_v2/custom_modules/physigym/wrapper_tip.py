@@ -19,6 +19,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
         w_cell=0.7,
         w_increase=0.2,
         w_amount=0.1,
+        frequence_episode_test=3,
     ):
         """
         Wraps a PhysiCell environment to use a flat continuous Box action space.
@@ -90,9 +91,7 @@ class PhysiCellModelWrapper(gym.Wrapper):
             .xpath("//user_parameters/dt_gym")[0]
             .text
         )
-
-    def set_mode_next_episode(self, mode: str):
-        self._next_mode = mode
+        self.frequence_episode_test = frequence_episode_test
 
     def change_xml(self, keys: list[str], elements: list):
         for key, element in zip(keys, elements):
@@ -167,14 +166,13 @@ class PhysiCellModelWrapper(gym.Wrapper):
             - self.w_amount * drug_t
             - self.w_increase * drug_increase
         )
+        reward -= 100 if terminated and info["number_tumor"] > 100 else 0
 
         data = {
             "step": self.env.unwrapped.step_episode,
             "reward": reward,
             "mean_drugs": drug_t,
             "number_tumor": info["number_tumor"],
-            "number_cell_1": info["number_cell_1"],
-            "number_cell_2": info["number_cell_2"],
             "train_test": info["train_test"],
         }
 
@@ -278,10 +276,12 @@ class PhysiCellModelWrapper(gym.Wrapper):
         no_generation_cfg=None,
         **kwargs,
     ):
-        if hasattr(self, "_next_mode"):
-            self.mode = self._next_mode
-            del self._next_mode
-
+        self.mode = (
+            "test"
+            if (self.env.unwrapped.episode + 1) % self.frequence_episode_test == 0
+            else "train"
+        )
+        self.generate_physicell_data = True if self.mode == "test" else False
         if options is None:
             options = {}
 

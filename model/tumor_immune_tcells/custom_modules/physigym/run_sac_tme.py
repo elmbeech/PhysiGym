@@ -20,8 +20,9 @@ from tqdm import tqdm
 
 # Your project imports
 from vectorized_tip import vec_envs
-from nn import Actor, QNetwork, FeatureExtractor
+from nn_tip import Actor, QNetwork
 from rb_tip import ReplayBuffer
+
 
 from torch.multiprocessing import Event, Queue
 import queue
@@ -55,7 +56,6 @@ def obs_to_pyg(obs_dict, device):
 
 def actor_process(
     actor_queue,
-    encoder_queue,
     sample_queue,
     stats_queue,
     d_arg,
@@ -86,25 +86,17 @@ def actor_process(
         # Model-side flag (not env-side)
         "is_graph": "graph" in d_arg["model"]["observation_mode"],
     }
-    full_data_train_timesteps = int(
-        d_arg["rl"]["percent_train_full_data_timesteps"]
-        * d_arg["rl"]["train_total_timesteps"]
-    )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-    encoder_local = FeatureExtractor(
-        cfg=d_arg_env,
-        neural_architecture_image=d_arg.get("neural_architecture_image", "impala"),
+    actor_local = Actor(
+        d_arg_env, d_arg.get("neural_architecture_image", "impala")
     ).cpu()
-    actor_local = Actor(d_arg_env).cpu()
     if d_arg_env["is_graph"]:
         obs_nn = obs_to_pyg(obs, "cpu")
     else:
         obs_nn = torch.from_numpy(obs).cpu()
-
-    _, _, _ = actor_local.get_action(encoder_local(obs_nn))
+        _, _, _ = actor_local.get_action(obs_nn)
     actor_local.eval()
     num_envs = envs.num_envs
-    pending_mode = "train"
     mode_switched = False
     episode_returns = np.zeros(num_envs, dtype=np.float64)
     local_step = 0
@@ -112,24 +104,15 @@ def actor_process(
         # Try to fetch a new policy (non-blocking)
         try:
             while True:
-                new_params_actor = actor_queue.get_nowait()
+                new_params = actor_queue.get_nowait()
                 # load params safely
                 try:
-                    actor_local.load_state_dict(new_params_actor)
+                    actor_local.load_state_dict(new_params)
                 except Exception:
                     # if state_dict was saved on CUDA, map_location might be required
                     actor_local.load_state_dict(
-                        {k: v.cpu() for k, v in new_params_actor.items()}
+                        {k: v.cpu() for k, v in new_params.items()}
                     )
-                if "scalars" not in d_arg_env["observation_mode"]:
-                    new_params_encoder = encoder_queue.get_nowait()
-                    try:
-                        encoder_local.load_state_dict(new_params_encoder)
-                    except Exception:
-                        # if state_dict was saved on CUDA, map_location might be required
-                        encoder_local.load_state_dict(
-                            {k: v.cpu() for k, v in new_params_encoder.items()}
-                        )
         except queue.Empty:
             pass
         if local_step <= d_arg["rl"]["learning_starts"]:
@@ -142,12 +125,11 @@ def actor_process(
             # Inference
             with torch.no_grad():
                 if d_arg_env["is_graph"]:
-                    obs = obs_to_pyg(obs, "cpu")
-                    obs_nn = encoder_local(obs)
+                    pyg_batch = obs_to_pyg(obs, "cpu")
+                    actions_tensor, _, _ = actor_local.get_action(pyg_batch)
                 else:
-                    obs = torch.from_numpy(obs).cpu()
-                obs_nn = encoder_local(obs)
-                actions_tensor, _, _ = actor_local.get_action(obs_nn)
+                    x = torch.from_numpy(obs).cpu()
+                    actions_tensor, _, _ = actor_local.get_action(x)
                 actions = actions_tensor.cpu().numpy()
 
         # Step envs
@@ -170,15 +152,6 @@ def actor_process(
         # Bookkeeping per-env
         episode_returns += rewards.astype(np.float64)
         local_step += num_envs - len(envs.dead_envs)
-        if (not mode_switched) and local_step > d_arg["rl"]["train_total_timesteps"]:
-            pending_mode = "test"
-            mode_switched = True
-
-            # Apply to ALL envs at once
-            envs.env_method("set_mode_next_episode", pending_mode)
-
-        if local_step > full_data_train_timesteps:
-            envs.set_attr("generate_physicell_data", True)
         # Accumulate samples for this env step
         batch_samples = []
 
@@ -218,8 +191,10 @@ def actor_process(
 
             if done:
                 episode_returns[i] = 0.0
-
-            batch_samples.append((o, actions[i], float(rewards[i]), no, bool(dones[i])))
+            if info["train_test"] == "train":
+                batch_samples.append(
+                    (o, actions[i], float(rewards[i]), no, bool(dones[i]))
+                )
 
         if batch_samples:
             try:
@@ -248,7 +223,6 @@ def run_async_sac(d_arg):
     random.seed(seed)
     # Process communication
     actor_queue = mp.Queue(maxsize=5)
-    encoder_queue = mp.Queue(maxsize=5)
     sample_queue = mp.Queue(maxsize=10000)
     stats_queue = mp.Queue(maxsize=1000)
     env_info_queue = mp.Queue(maxsize=1)
@@ -258,7 +232,6 @@ def run_async_sac(d_arg):
         target=actor_process,
         args=(
             actor_queue,
-            encoder_queue,
             sample_queue,
             stats_queue,
             d_arg,
@@ -280,12 +253,10 @@ def run_async_sac(d_arg):
         state_type=d_arg_env["observation_space_dtype"],
         is_graph=d_arg_env["is_graph"],
     )
-    encoder = FeatureExtractor(
-        cfg=d_arg_env, neural_architecture_image=d_arg["neural_architecture_image"]
-    ).to(device)
-    actor = Actor(d_arg_env).to(device)
-    qf1 = QNetwork().to(device)
-    qf2 = QNetwork().to(device)
+
+    actor = Actor(d_arg_env, d_arg["neural_architecture_image"]).to(device)
+    qf1 = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
+    qf2 = QNetwork(d_arg_env, d_arg["neural_architecture_image"]).to(device)
     # Networks
     if d_arg_env["is_graph"]:
         dummy_graph = Data(
@@ -300,20 +271,24 @@ def run_async_sac(d_arg):
             device=device,
             dtype=torch.float32,
         )
-    dummy_state_encoded = encoder(dummy_state)
 
     with torch.no_grad():
         if d_arg_env["is_graph"]:
-            actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
+            actions_tensor, _, _ = actor.get_action(dummy_state)
         else:
-            actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
+            actions_tensor, _, _ = actor.get_action(dummy_state)
 
-        _ = qf1(dummy_state_encoded, actions_tensor)
-        _ = qf2(dummy_state_encoded, actions_tensor)
+        _ = qf1(dummy_state, actions_tensor)
+        _ = qf2(dummy_state, actions_tensor)
 
     qf1_target = deepcopy(qf1).to(device)
     qf2_target = deepcopy(qf2).to(device)
 
+    q_optimizer = optim.Adam(
+        list(qf1.parameters()) + list(qf2.parameters()),
+        lr=d_arg["rl"]["q_lr"],
+    )
+    actor_optimizer = optim.Adam(actor.parameters(), lr=d_arg["rl"]["policy_lr"])
     # Alpha (entropy)
     if d_arg["rl"]["autotune"]:
         target_entropy = -float(np.prod(d_arg_env["action_space_shape"]))
@@ -323,14 +298,6 @@ def run_async_sac(d_arg):
     else:
         alpha = float(d_arg["rl"]["alpha"])
 
-    try:
-        encoder_queue.put_nowait(
-            {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
-        )
-    except queue.Full:
-        encoder_queue.put(
-            {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
-        )
     # send initial policy
     try:
         actor_queue.put_nowait(
@@ -338,13 +305,6 @@ def run_async_sac(d_arg):
         )
     except queue.Full:
         actor_queue.put({k: v.detach().cpu() for k, v in actor.state_dict().items()})
-    if "scalars" not in d_arg_env["observation_mode"]:
-        encoder_optimizer = optim.Adam(encoder.parameters(), lr=d_arg["rl"]["q_lr"])
-    q_optimizer = optim.Adam(
-        list(qf1.parameters()) + list(qf2.parameters()),
-        lr=d_arg["rl"]["q_lr"],
-    )
-    actor_optimizer = optim.Adam(actor.parameters(), lr=d_arg["rl"]["policy_lr"])
 
     # Logging
     output_dir = d_arg["model"]["output_dir"]
@@ -358,15 +318,15 @@ def run_async_sac(d_arg):
         run.define_metric("charts/*", step_metric="samples_drained")
 
     tau = d_arg["rl"]["tau"]
-    train_total_timesteps = d_arg["rl"]["train_total_timesteps"]
+    total_timesteps = d_arg["rl"]["total_timesteps"]
 
     try:
         print("Starting training loop...")
-        pbar = tqdm(total=train_total_timesteps)
+        pbar = tqdm(total=total_timesteps)
 
         drained = 0
         grad_steps = 0
-        while drained < train_total_timesteps:
+        while drained < total_timesteps:
             pbar.update(drained - pbar.n)
             local_batch = []
 
@@ -392,16 +352,14 @@ def run_async_sac(d_arg):
                     stat = stats_queue.get_nowait()
                 except queue.Empty:
                     break
-
                 log_dict = {
                     "samples_drained": drained,
-                    "charts/return": stat["episode_return"],
-                    "charts/length": stat["episode_length"],
+                    f"charts/{stat['train_test']}_return": stat["episode_return"],
+                    f"charts/{stat['train_test']}_length": stat["episode_length"],
                     "charts/step": stat["step"],
-                    "charts/timestamp": stat["timestamp"],
                     "charts/grad_steps": grad_steps,
-                    "charts/buffer_size": len(rb),
                 }
+
                 if d_arg["simulation"]["wandb_track"]:
                     run.log(log_dict)
                 else:
@@ -421,19 +379,11 @@ def run_async_sac(d_arg):
                 action = batch["action"]
                 done = batch["done"]
                 reward = batch["reward"]
-
-                # ---------- Encode once ----------
-                z = encoder(state)
+                # compute targets
                 with torch.no_grad():
-                    z_next = encoder(next_state)
-
-                # ---------- Target Q ----------
-                with torch.no_grad():
-                    next_actions, next_log_pi, _ = actor.get_action(z_next)
-
-                    q1_next = qf1_target(z_next, next_actions)
-                    q2_next = qf2_target(z_next, next_actions)
-
+                    next_actions, next_log_pi, _ = actor.get_action(next_state)
+                    q1_next = qf1_target(next_state, next_actions)
+                    q2_next = qf2_target(next_state, next_actions)
                     min_q_next = torch.min(q1_next, q2_next) - alpha * next_log_pi
                     next_q = (
                         reward.flatten()
@@ -442,35 +392,23 @@ def run_async_sac(d_arg):
                         * min_q_next.squeeze()
                     )
 
-                # ---------- Critic ----------
-                q1 = qf1(z, action).view(-1)
-                q2 = qf2(z, action).view(-1)
+                q1 = qf1(state, action).view(-1)
+                q2 = qf2(state, action).view(-1)
+                qf1_loss = F.mse_loss(q1, next_q)
+                qf2_loss = F.mse_loss(q2, next_q)
+                qf_loss = qf1_loss + qf2_loss
 
-                qf_loss = F.mse_loss(q1, next_q) + F.mse_loss(q2, next_q)
-
-                # Zero gradients for ALL optimizers that will update
                 q_optimizer.zero_grad()
-                encoder_optimizer.zero_grad() if "scalars" not in d_arg_env[
-                    "observation_mode"
-                ] else None
-
-                qf_loss.backward()  # Gradients flow to both Q-heads AND encoder
-
-                # Step both optimizers
-                q_optimizer.step()  # Updates Q-heads
-                encoder_optimizer.step() if "scalars" not in d_arg_env[
-                    "observation_mode"
-                ] else None
-
+                qf_loss.backward()
+                q_optimizer.step()
                 grad_steps += 1
 
                 # Policy & alpha update
                 if grad_steps % d_arg["rl"]["policy_frequency"] == 0:
-                    z_detached = z.detach()
                     for _ in range(d_arg["rl"]["policy_frequency"]):
-                        actions, log_pi, _ = actor.get_action(z_detached)
-                        q1_pi = qf1(z_detached, actions)
-                        q2_pi = qf2(z_detached, actions)
+                        actions, log_pi, _ = actor.get_action(state)
+                        q1_pi = qf1(state, actions)
+                        q2_pi = qf2(state, actions)
                         min_q_pi = torch.min(q1_pi, q2_pi)
                         actor_loss = (alpha * log_pi - min_q_pi).mean()
 
@@ -512,72 +450,6 @@ def run_async_sac(d_arg):
                 except queue.Full:
                     # if actor queue full, skip this update (actor will pick up later)
                     pass
-                if "scalars" not in d_arg_env["observation_mode"]:
-                    try:
-                        encoder_queue.put_nowait(
-                            {
-                                k: v.detach().cpu()
-                                for k, v in encoder.state_dict().items()
-                            }
-                        )
-
-                    except queue.Full:
-                        # if actor queue full, skip this update (actor will pick up later)
-                        pass
-
-        print("Starting testing loop...")
-        test_timesteps = d_arg["rl"]["test_timesteps"]
-        pbar = tqdm(total=test_timesteps)
-
-        test_drained = 0
-
-        while test_drained < test_timesteps:
-            # update progress bar
-            pbar.update(test_drained - pbar.n)
-
-            # --------------------------------------------------
-            # 1) Drain samples → COUNT STEPS
-            # --------------------------------------------------
-            while True:
-                try:
-                    item = sample_queue.get_nowait()
-                except queue.Empty:
-                    break
-
-                # item can be a single transition or a batch
-                if isinstance(item, list):
-                    test_drained += len(item)
-                else:
-                    test_drained += 1
-
-            # --------------------------------------------------
-            # 2) Drain stats → LOG TEST EPISODES
-            # --------------------------------------------------
-            while not stats_queue.empty():
-                try:
-                    stat = stats_queue.get_nowait()
-                except queue.Empty:
-                    break
-
-                if stat["train_test"] == "test":
-                    type_mode = stat["type_mode"]
-
-                    # Construct the log dictionary
-                    log_dict = {
-                        # The "Magic" Key: matches the define_metric step_metric
-                        "samples_drained": test_drained + drained,
-                        f"charts/test_{type_mode}_return": stat["episode_return"],
-                        f"charts/test_{type_mode}_length": stat["episode_length"],
-                        f"charts/test_{type_mode}_timestamp": stat["timestamp"],
-                        f"charts/test_{type_mode}_step_offset": stat["step"] - drained,
-                    }
-
-                    if d_arg["simulation"]["wandb_track"]:
-                        run.log(log_dict)
-                    else:
-                        for tag, value in log_dict.items():
-                            if tag != "samples_drained":
-                                writer.add_scalar(tag, value, drained)
 
             time.sleep(0.05)
 
@@ -636,25 +508,25 @@ if __name__ == "__main__":
 
     # === Training / RL Settings ===
     parser.add_argument(
-        "--max_time_episode", type=float, default=12900.0, help="Max time per episode"
+        "--max_time_episode", type=float, default=7200.0, help="Max time per episode"
     )
     parser.add_argument(
         "--learning_starts",
         type=int,
-        default=1e4,
+        default=5e3,
         help="Steps before learning starts",
     )
     parser.add_argument(
-        "--train_total_timesteps",
+        "--total_timesteps",
         type=int,
-        default=int(3e5),
+        default=int(4e5),
         help="Total timesteps for training",
     )
     parser.add_argument(
         "--rl_threads", type=int, default=4, help="Number of RL threads"
     )
     parser.add_argument(
-        "--num_envs", type=int, default=14, help="Parallel PhysiCell instances"
+        "--num_envs", type=int, default=4, help="Parallel PhysiCell instances"
     )
     parser.add_argument(
         "--buffer_size", type=int, default=int(3e5), help="Replay buffer size"
@@ -667,9 +539,7 @@ if __name__ == "__main__":
     )
 
     # === Experiment Metadata ===
-    parser.add_argument(
-        "--name", default="async_sac_tip_train_test", help="Experiment name"
-    )
+    parser.add_argument("--name", default="async_sac_tme_v2", help="Experiment name")
     parser.add_argument(
         "--wandb", default="true", help="Log to Weights & Biases? (true/false)"
     )
@@ -678,10 +548,17 @@ if __name__ == "__main__":
     )
 
     # === Initialization & Cells ===
-    parser.add_argument("--tumor", type=int, default=512, help="Initial tumor size")
-    parser.add_argument("--cell_1", type=int, default=128, help="Number of cell type 1")
+    parser.add_argument("--tumor", type=int, default=256, help="Initial tumor size")
+    parser.add_argument("--M_1", type=int, default=64, help="Number of M1")
+    parser.add_argument("--T_cells", type=int, default=32, help="Number of Tcells")
     parser.add_argument(
-        "--cell_2_fraction", type=float, default=None, help="Fraction of cell type 2"
+        "--M2_fraction", type=float, default=None, help="Fraction of M2"
+    )
+    parser.add_argument(
+        "--frequence_episode_test",
+        type=float,
+        default=None,
+        help="Frequence episode test",
     )
 
     parser.add_argument(
@@ -708,7 +585,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TRAIN_TEST_TIP_60min",
+        "project": "SAC_ASYNC_TME_V2",
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,
@@ -740,10 +617,11 @@ if __name__ == "__main__":
         "w_cell": 0.7,
         "w_increase": 0.2,
         "w_amount": 0.1,
+        "frequence_episode_test": 9,
     }
 
     d_arg_rl = {
-        "train_total_timesteps": args.train_total_timesteps,
+        "total_timesteps": args.total_timesteps,
         "buffer_size": args.buffer_size,
         "batch_size": args.batch_size_multiplier * args.num_envs,  # e.g. 64 × num_envs
         "learning_starts": args.learning_starts,
@@ -756,8 +634,6 @@ if __name__ == "__main__":
         "policy_lr": 3e-4,
         "gamma": 0.99,
         "num_loops": 3,
-        "test_timesteps": int(2e5),
-        "percent_train_full_data_timesteps": 0.99,
     }
 
     d_arg_vect = {
@@ -770,21 +646,26 @@ if __name__ == "__main__":
             "threshold": 0.55,
             "number_cells": args.tumor,
         },
-        "cell_1": {
+        "M1": {
             "correlation_length": 45,
             "threshold": 0.55,
-            "number_cells": args.cell_1,
+            "number_cells": args.M_1,
+        },
+        "T_cell": {
+            "correlation_length": 45,
+            "threshold": 0.55,
+            "number_cells": args.T_cells,
         },
     }
 
     d_arg_generation = {
         "params": params,
-        "cell_2_fraction": [args.cell_2_fraction]
-        if args.cell_2_fraction is not None
-        else [0.0, 0.25, 0.5, 0.75, 1.0],
+        "M2_fraction": [args.M2_fraction]
+        if args.M2_fraction is not None
+        else [0.0, 1.0],
         "seed": d_arg_simulation["seed"],
-        "mode_train": "network_field",
-        "mode_test": ["rectangle", "circular", "random", "network_field"],
+        "mode_train": ["network_field","rectangle"],
+        "mode_test": ["random", "circular"],
     }
     # === Final d_arg ===
     d_arg = {

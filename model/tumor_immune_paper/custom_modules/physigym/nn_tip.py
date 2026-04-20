@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATConv, global_mean_pool
 import numpy as np
+from torch.distributions import Normal, kl_divergence
 ###########################
 # Classes Neural Networks #
 ###########################
@@ -10,14 +11,14 @@ import numpy as np
 
 class PixelPreprocess(nn.Module):
     """
-    Normalizes pixel observations to [-0.5, 0.5].
+    Normalizes pixel observations to [0.0, 1.0].
     """
 
     def __init__(self):
         super().__init__()
 
     def forward(self, x):
-        return x.div(255.0).sub(0.5)
+        return x.div(255.0)
 
 
 class ResidualBlock(nn.Module):
@@ -82,162 +83,54 @@ class GraphFeatureExtractor(nn.Module):
         return global_mean_pool(x, data.batch)
 
 
-class RelativeBias(nn.Module):
-    def __init__(self, heads, hidden=32):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(2, hidden), nn.ReLU(), nn.Linear(hidden, heads)
-        )
-
-    def forward(self, xy):  # (B, N, 2)
-        delta = xy[:, :, None, :] - xy[:, None, :, :]  # (B, N, N, 2)
-        return self.mlp(delta)  # (B, N, N, H)
-
-
-# -----------------------------
-# Fast attention block
-# -----------------------------
-class FastAttention(nn.Module):
-    def __init__(self, dim, heads=4):
-        super().__init__()
-        self.heads = heads
-        self.scale = (dim // heads) ** -0.5
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.proj = nn.Linear(dim, dim)
-
-    def forward(self, x, attn_mask=None, bias=None):
-        B, N, D = x.shape
-        H = self.heads
-
-        qkv = self.qkv(x).view(B, N, 3, H, D // H)
-        q, k, v = qkv.unbind(dim=2)
-
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
-
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-
-        if bias is not None:
-            attn = attn + bias.permute(0, 3, 1, 2)
-
-        if attn_mask is not None:
-            attn = attn.masked_fill(attn_mask[:, None, None, :] == 0, -1e9)
-
-        attn = attn.softmax(dim=-1)
-        out = (attn @ v).transpose(1, 2).reshape(B, N, D)
-
-        return self.proj(out)
-
-
-# -----------------------------
-# Encoder block
-# -----------------------------
-class FastBlock(nn.Module):
-    def __init__(self, dim, heads=4, mlp_ratio=2):
-        super().__init__()
-        self.attn = FastAttention(dim, heads)
-        self.ff = nn.Sequential(
-            nn.Linear(dim, dim * mlp_ratio), nn.ReLU(), nn.Linear(dim * mlp_ratio, dim)
-        )
-        self.norm1 = nn.LayerNorm(dim)
-        self.norm2 = nn.LayerNorm(dim)
-
-    def forward(self, x, attn_mask=None, bias=None):
-        x = x + self.attn(self.norm1(x), attn_mask, bias)
-        x = x + self.ff(self.norm2(x))
-        return x
-
-
-# -----------------------------
-# Full encoder
-# -----------------------------
-class FastSetEncoder(nn.Module):
-    def __init__(
-        self, input_dim, dim=64, depth=2, heads=4, use_relative_bias=True
-    ):
-        super().__init__()
-
-        self.embed = nn.Linear(input_dim, dim)
-        self.blocks = nn.ModuleList([FastBlock(dim, heads) for _ in range(depth)])
-
-        self.rel_bias = RelativeBias(heads) if use_relative_bias else None
-        self.norm = nn.LayerNorm(dim)
-
-    def forward(self, x):
-        """
-        x: (B, N, input_dim)
-           zero rows = padding
-        """
-
-        # padding mask: 1 = valid, 0 = padding
-        mask = (x.abs().sum(dim=-1) > 0).float()
-
-        xy = x[..., :2]  # raw x,y
-
-        x = self.embed(x)
-
-        bias = self.rel_bias(xy) if self.rel_bias else None
-
-        for block in self.blocks:
-            x = block(x, mask, bias)
-
-        x = self.norm(x)
-
-        # mean pooling over valid nodes
-        x = (x * mask[..., None]).sum(dim=1) / (mask.sum(dim=1, keepdim=True) + 1e-6)
-
-        return x
-
-
 class FeatureExtractor(nn.Module):
-    """Handles both image-based and vector-based state inputs dynamically."""
+    """Handles image-based, vector-based and graph-based state inputs dynamically."""
 
-    def __init__(self, cfg, neural_architecture_image="impala", **kwargs):
+    def __init__(self, cfg, neural_architecture_image="impala"):
         super().__init__()
 
-        self.is_graph = cfg["is_graph"]
-        self.is_image = False
-
-        obs_shape = cfg["observation_space_shape"] if not self.is_graph else None
+        obs_shape = cfg["observation_space_shape"]
+        self.is_graph = True if "graph" in cfg["observation_mode"] else False
+        self.is_tranformer_node = (
+            True if "transformer" in cfg["observation_mode"] else False
+        )
+        self.is_image = (len(obs_shape) == 3) and not self.is_tranformer_node
 
         if self.is_graph:
             # Assume node features have fixed dimension
             node_feature_dim = cfg["node_feature_dim"]
             self.feature_extractor = GraphFeatureExtractor(
-                node_feature_dim=node_feature_dim
+                in_channels=node_feature_dim  # ✅ Correct parameter
             )
             self.feature_size = 128
 
-        else:
-            self.is_image = len(obs_shape) == 3  # (C, H, W)
-            if self.is_image:
-                if neural_architecture_image == "impala":
-                    layers = [
-                        PixelPreprocess(),
-                        ImpalaBlock(obs_shape[0], 16),
-                        ImpalaBlock(16, 32),
-                        ImpalaBlock(32, 32),
-                        nn.Flatten(),
-                    ]
-                elif neural_architecture_image == "hadamax":
-                    layers = [
-                        PixelPreprocess(),
-                        HadamaxBlock(obs_shape[0], 16),
-                        HadamaxBlock(16, 32),
-                        HadamaxBlock(32, 32),
-                        nn.Flatten(),
-                    ]
-                else:
-                    raise ValueError(
-                        f"Error: unknown neural architecture: {neural_architecture_image}"
-                    )
-
-                self.feature_extractor = nn.Sequential(*layers)
-                self.feature_size = self._get_feature_size(obs_shape)
+        elif self.is_image:
+            if neural_architecture_image == "impala":
+                layers = [
+                    PixelPreprocess(),
+                    ImpalaBlock(obs_shape[0], 16),
+                    ImpalaBlock(16, 32),
+                    ImpalaBlock(32, 32),
+                    nn.Flatten(),
+                ]
+            elif neural_architecture_image == "hadamax":
+                layers = [
+                    PixelPreprocess(),
+                    HadamaxBlock(obs_shape[0], 16),
+                    HadamaxBlock(16, 32),
+                    HadamaxBlock(32, 32),
+                    nn.Flatten(),
+                ]
             else:
-                self.feature_extractor = nn.Identity()
-                self.feature_size = int(np.prod(obs_shape))
+                raise ValueError(
+                    f"Error: unknown neural architecture: {neural_architecture_image}"
+                )
+
+            self.feature_extractor = nn.Sequential(*layers)
+            self.feature_size = self._get_feature_size(obs_shape)
+        else:
+            self.feature_extractor = nn.Identity()
+            self.feature_size = int(np.prod(obs_shape))
 
     def _get_feature_size(self, obs_shape):
         """Pass a dummy tensor through CNN to compute feature size dynamically."""
@@ -247,7 +140,7 @@ class FeatureExtractor(nn.Module):
             return int(np.prod(out.shape[1:]))
 
     def forward(self, x):
-        if self.is_image:
+        if self.is_image or self.is_tranformer_node:
             x = self.feature_extractor(x)  # Apply CNN
             x = x.view(x.size(0), -1)  # Flatten
         elif self.is_graph:
@@ -258,21 +151,16 @@ class FeatureExtractor(nn.Module):
 class QNetwork(nn.Module):
     """Critic network (Q-function)"""
 
-    def __init__(self, cfg, neural_architecture_image, **kwargs):
+    def __init__(self):
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
-
         # Fully connected layers
         self.fc1 = nn.LazyLinear(256)
         self.fc2 = nn.LazyLinear(256)
         self.fc3 = nn.LazyLinear(1)
         self.mish = nn.Mish()
 
-    def forward(self, x, a):
-        x = self.feature_extractor(x)  # Extract features
-        x = torch.cat([x, a], dim=1)  # Concatenate state and action
+    def forward(self, z, a):
+        x = torch.cat([z, a], dim=1)  # Concatenate state and action
 
         x = self.mish(self.fc1(x))
         x = self.mish(self.fc2(x))
@@ -286,11 +174,8 @@ class Actor(nn.Module):
     LOG_STD_MAX = 2
     LOG_STD_MIN = -5
 
-    def __init__(self, cfg, neural_architecture_image, **kwargs):
+    def __init__(self, cfg):
         super().__init__()
-        self.feature_extractor = FeatureExtractor(
-            cfg, neural_architecture_image, **kwargs
-        )
         action_dim = np.prod(cfg["action_space_shape"])
 
         # Fully connected layers
@@ -315,10 +200,8 @@ class Actor(nn.Module):
             ),
         )
 
-    def forward(self, x):
-        x = self.feature_extractor(x)  # Extract features
-
-        x = self.relu(self.fc1(x))
+    def forward(self, z):
+        x = self.relu(self.fc1(z))
         x = self.relu(self.fc2(x))
 
         mean = self.fc_mean(x)
@@ -330,8 +213,8 @@ class Actor(nn.Module):
 
         return mean, log_std
 
-    def get_action(self, x):
-        mean, log_std = self(x)
+    def get_action(self, z):
+        mean, log_std = self.forward(z)
         std = log_std.exp()
         normal = torch.distributions.Normal(mean, std)
 
@@ -345,3 +228,223 @@ class Actor(nn.Module):
 
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+
+
+class ImpalaDecoder(nn.Module):
+    def __init__(self, latent_dim, obs_shape):
+        super().__init__()
+        C_out, H_out, W_out = obs_shape
+        self.obs_shape = obs_shape
+
+        self.fc = nn.Linear(latent_dim, 32 * 8 * 8)  # small hidden map
+
+        self.block1 = nn.Sequential(
+            nn.ConvTranspose2d(32, 16, 4, stride=2, padding=1),  # upsample
+            nn.Mish(),
+        )
+        self.block2 = nn.Sequential(
+            nn.ConvTranspose2d(16, 16, 4, stride=2, padding=1),
+            nn.Mish(),
+        )
+        self.block3 = nn.Sequential(
+            nn.ConvTranspose2d(16, C_out, 4, stride=2, padding=1),
+        )
+        self.final_resize = nn.AdaptiveAvgPool2d((H_out, W_out))
+
+    def forward(self, z):
+        B = z.size(0)
+        x = self.fc(z)  # (B, 32*8*8)
+        x = x.view(B, 32, 8, 8)  # reshape to pseudo 3D
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.final_resize(x)
+        return x
+
+
+class AEImpala(nn.Module):
+    # https://github.com/denisyarats/pytorch_sac_ae/blob/master/sac_ae.py
+
+    def __init__(self, cfg):
+        super().__init__()
+
+        obs_shape = cfg["observation_space_shape"]
+        lr = cfg.get("lr", 3e-4)
+
+        # -------------------
+        # Encoder
+        # -------------------
+        self.encoder = nn.Sequential(
+            PixelPreprocess(),
+            ImpalaBlock(obs_shape[0], 16),
+            ImpalaBlock(16, 32),
+            ImpalaBlock(32, 8),
+        )
+
+        self.flatten = nn.Flatten()
+
+        # infer encoder output shape
+        with torch.no_grad():
+            dummy = torch.zeros(1, *obs_shape)
+            h = self.encoder(dummy)  # Encoder output: (B, C_enc, H_enc, W_enc)
+            self.enc_shape = h.shape[1:]  # (C_enc, H_enc, W_enc)
+            self.feature_dim = int(np.prod(self.enc_shape))
+        # -------------------
+        # Decoder
+        # -------------------
+        self.decoder = ImpalaDecoder(
+            latent_dim=self.feature_dim,
+            obs_shape=obs_shape,
+        )
+        # -------------------
+        # Optimizers
+        # -------------------
+        self.encoder_optimizer = torch.optim.Adam(self.encoder.parameters(), lr=lr)
+
+        self.decoder_optimizer = torch.optim.Adam(self.decoder.parameters(), lr=lr)
+        self.decoder_latent_lambda = cfg.get("decoder_latent_lambda", 1e-6)
+
+    # -------------------
+    # Encode
+    # -------------------
+    def encode(self, x):
+
+        h = self.encoder(x)
+        z = self.flatten(h)
+        return z
+
+    # -------------------
+    # Forward
+    # -------------------
+    def forward(self, x):
+
+        z = self.encode(x)
+        rec = self.decoder(z)
+
+        return rec, z
+
+    def compute_reconstruction_loss(self, rec_obs, obs):
+
+        rec_loss = F.mse_loss(rec_obs, obs)
+
+        latent_loss = (0.5 * rec_obs.pow(2).sum(1)).mean()
+
+        loss = rec_loss + self.decoder_latent_lambda * latent_loss
+
+        self.encoder_optimizer.zero_grad()
+        self.decoder_optimizer.zero_grad()
+
+        loss.backward()
+
+        self.encoder_optimizer.step()
+        self.decoder_optimizer.step()
+        return {
+            "loss": loss.item(),
+            "rec_loss": rec_loss.item(),
+            "latent_loss": latent_loss.item(),
+        }
+
+
+class VAEImpala(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+
+        obs_shape = cfg["observation_space_shape"]
+        self.latent_dim = cfg.get("latent_dim", 32)  # The size of the bottleneck
+        lr = cfg.get("lr", 3e-4)
+
+        # -------------------
+        # Encoder (Shared Backbone)
+        # -------------------
+        self.encoder_backbone = nn.Sequential(
+            # PixelPreprocess(), # Assuming this handles uint8 to float32 [0, 1]
+            ImpalaBlock(obs_shape[0], 16),
+            ImpalaBlock(16, 32),
+            ImpalaBlock(32, 8),
+            nn.Flatten(),
+        )
+
+        # Infer backbone output size
+        with torch.no_grad():
+            dummy = torch.zeros(1, *obs_shape)
+            backbone_out = self.encoder_backbone(dummy)
+            self.backbone_dim = backbone_out.shape[1]
+
+        # VAE Heads: Mapping backbone to Normal Distribution parameters
+        self.fc_mu = nn.Linear(self.backbone_dim, self.latent_dim)
+        self.fc_std = nn.Linear(self.backbone_dim, self.latent_dim)
+
+        # -------------------
+        # Decoder
+        # -------------------
+        # Note: Decoder now takes 'latent_dim' instead of 'feature_dim'
+        self.decoder = ImpalaDecoder(
+            latent_dim=self.latent_dim,
+            obs_shape=obs_shape,
+        )
+
+        # -------------------
+        # Optimizers
+        # -------------------
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
+
+        # Beta scales the KL divergence (Beta-VAE)
+        self.beta = cfg.get("beta", 1.0)
+
+    def encode(self, x):
+        hidden = self.encoder_backbone(x)
+        mu = self.fc_mu(hidden)
+        # We use softplus to ensure standard deviation is positive
+        std = F.softplus(self.fc_std(hidden)) + 1e-6
+
+        # Create the distribution
+        dist = Normal(mu, std)
+        return dist
+
+    def forward(self, x):
+        dist = self.encode(x)
+
+        # Reparameterization trick: sample z = mu + std * epsilon
+        z = dist.rsample()
+
+        rec = self.decoder(z)
+        return rec, dist
+
+    def compute_reconstruction_loss(self, rec_obs, obs, dist):
+
+        # 2. Reconstruction Loss (Likelihood)
+        # Using MSE assumes a Gaussian observation model
+        rec_loss = F.mse_loss(rec_obs, obs)
+
+        # 3. KL Divergence Loss
+        # Measures how much 'dist' deviates from a standard Normal(0, 1)
+        prior = Normal(torch.zeros_like(dist.loc), torch.ones_like(dist.scale))
+        kl_loss = kl_divergence(dist, prior).sum(dim=-1).mean()
+
+        total_loss = rec_loss + (self.beta * kl_loss)
+
+        # 4. Update
+        self.optimizer.zero_grad()
+        total_loss.backward()
+        self.optimizer.step()
+
+        return {
+            "loss": total_loss.item(),
+            "rec_loss": rec_loss.item(),
+            "kl_loss": kl_loss.item(),
+        }
+
+
+if __name__ == "__main__":
+    B = 64
+    C = 4
+    H = 84
+    W = 84
+    cfg = {
+        "action_space_high": 1.0,
+        "action_space_low": 0.0,
+        "action_space_shape": 10,
+        "observation_space_shape": [C, H, W],
+        "neural_architecture_image": "impala",
+    }
+    image = torch.rand((B, C, H, W))

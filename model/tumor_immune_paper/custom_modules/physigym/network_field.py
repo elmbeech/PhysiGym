@@ -1,9 +1,7 @@
 import numpy as np
 import pandas as pd
 from tysserand import tysserand as ty
-from collections import defaultdict
 import os
-import shutil
 
 from math import sqrt
 from scipy.ndimage import gaussian_filter

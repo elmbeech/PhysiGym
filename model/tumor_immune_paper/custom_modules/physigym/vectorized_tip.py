@@ -187,6 +187,10 @@ def run_vectorized(cfg: dict):
             dtype=np.float32,
         )
         _, _, _, infos = envs.step(actions)
+        if local_step > 1000:
+            envs.set_attr("mode", "test")
+            envs.set_attr("generate_physicell_data", True)
+
         local_step += num_envs - len(envs.dead_envs)
         if all(info.get("disabled", False) for info in infos):
             print("[Actor] All envs dead — restarting VecEnv")
@@ -245,7 +249,7 @@ if __name__ == "__main__":
             "id": "physigym/ModelPhysiCellEnv-v0",
             "settingxml": args.settingxml,
             "settingcells": args.settingcells,
-            "output_dir": None,
+            "output_dir": "./new_wrapper_output_data",
             "cell_type_cmap": {
                 "tumor": "yellow",
                 "cell_1": "green",
@@ -253,7 +257,7 @@ if __name__ == "__main__":
                 "other_tissue": "red",
             },
             "figsize": (6, 6),
-            "observation_mode": "scalars_cells_substrates",  # "img_mc_cells_substrates",
+            "observation_mode": "img_mc_cells",  # "img_mc_cells_substrates",
             "render_mode": None,
             "verbose": False,
             "img_rgb_grid_size_x": 64,
@@ -267,7 +271,6 @@ if __name__ == "__main__":
             "w_cell": 0.7,
             "w_increase": 0.2,
             "w_amount": 0.1,
-            "frequency_save_data": None,
         },
         "generation": {
             "x_min": -256,
@@ -277,6 +280,14 @@ if __name__ == "__main__":
             "params": params,  # number of tumor cells for the initial state
             "seed": args.seed,  # seed
             "cell_2_fraction": 0.3,
+            "mode_train": "network_field",
+            "mode_test": [
+                "rectangle",
+                "circular",
+                "asymmetric",
+                "connected",
+                "network_field",
+            ],
         },
         "rl": {"total_timesteps": 25000},
     }
@@ -319,19 +330,18 @@ if __name__ == "__main__":
 
         df_combined.to_csv(csv_path, index=False)
 
+    _num_envs_seed_time(seeds=[1], list_num_envs=[1])
+
     def _num_envs_seed_time_cells(
-        seeds=[1, 16, 32, 64, 128],
-        list_tumor_cells=[4096, 2048, 1024, 512, 256],
-        cfg=cfg,
+        seeds=[1, 16, 32, 64, 128], list_tumor_cells=[4096, 2048, 1024, 512], cfg=cfg
     ):
+
         records = []
-        cfg["vectorization"]["num_envs"] = 9  # Optimal for 5 rl threads
+        cfg["vectorization"]["num_envs"] = 1  # Optimal for 5 rl threads
 
         for seed in seeds:
             for tumor_cells in list_tumor_cells:
-                cfg["generation"]["params"]["tumor"]["cancer_cells"]["number_cells"] = (
-                    tumor_cells
-                )
+                cfg["generation"]["params"]["tumor"]["number_cells"] = tumor_cells
                 cfg["generation"]["seed"] = seed
 
                 time_needed = run_vectorized(cfg)
@@ -355,4 +365,5 @@ if __name__ == "__main__":
             df_combined = df_new
 
         df_combined.to_csv(csv_path, index=False)
-        _num_envs_seed_time_cells()
+
+    # _num_envs_seed_time_cells()

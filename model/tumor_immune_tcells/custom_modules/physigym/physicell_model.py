@@ -724,11 +724,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             self.c_prev = self.c_t
         self.nb_tumor = self.c_t
 
-        # update cell_1 cell count
-        self.nb_cell_1 = self.df_alive.loc[(self.df_alive.type == "cell_1"), :].shape[0]
+        # update m1 cell count
+        self.nb_m1 = self.df_alive.loc[(self.df_alive.type == "m1"), :].shape[0]
 
-        # update cell_2 cell count
-        self.nb_cell_2 = self.df_alive.loc[(self.df_alive.type == "cell_2"), :].shape[0]
+        # update m2 cell count
+        self.nb_m2 = self.df_alive.loc[(self.df_alive.type == "m2"), :].shape[0]
 
         # observe the environemnt
         if self.observation_mode == "scalars_cells":
@@ -1089,8 +1089,6 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         info = {
             "df_cell": self.df_cell,
             "number_tumor": self.nb_tumor,
-            "number_cell_1": self.nb_cell_1,
-            "number_cell_2": self.nb_cell_2,
         }
 
         # output
@@ -1114,7 +1112,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             truncated (the episode reached the max time limit).
         """
         # model dependent terminated processing logic goes here!
-        return True if (self.c_t == 0) else False  # or (self.c_t > 1536)
+        return True if (self.c_t > 1024) or (self.c_t == 0) else False
 
     def get_reset_values(self):
         """
@@ -1154,7 +1152,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         expected_growth = max(expected_growth, 1e-8)
 
         r_tumor = (self.c_prev - self.c_t) / expected_growth
-        return np.clip(r_tumor, -1, 1)
+        return 1 / (1 + np.exp(-r_tumor))
 
     def get_img(self):
         """

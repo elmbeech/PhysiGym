@@ -20,37 +20,11 @@ from tqdm import tqdm
 
 # Your project imports
 from vectorized_tip import vec_envs
-from nn import Actor, QNetwork, FeatureExtractor
+from nn import Actor, QNetwork, PixelPreprocess, VAEImpala
 from rb_tip import ReplayBuffer
 
 from torch.multiprocessing import Event, Queue
 import queue
-
-
-# --------------------------------------------------------------
-# Helper: convert dict-of-arrays → PyG Batch (same as your original)
-# --------------------------------------------------------------
-def obs_to_pyg(obs_dict, device):
-    graphs = []
-    B = obs_dict["node_features"].shape[0]
-    for i in range(B):
-        node_mask = obs_dict["node_mask"][i] > 0.5
-        edge_mask = obs_dict["edge_mask"][i] > 0.5
-
-        x = obs_dict["node_features"][i][node_mask]
-        edge_index = obs_dict["edge_index"][i][:, edge_mask]
-        edge_attr = obs_dict["edge_attr"][i][edge_mask]
-
-        g = Data(
-            x=torch.tensor(x, dtype=torch.float32),
-            edge_index=torch.tensor(edge_index, dtype=torch.long),
-            edge_attr=torch.tensor(edge_attr, dtype=torch.float32),
-        )
-        g.batch = torch.full((x.shape[0],), i, dtype=torch.long)
-        graphs.append(g)
-
-    batch = Batch.from_data_list(graphs)
-    return batch.to(device)
 
 
 def actor_process(
@@ -91,17 +65,12 @@ def actor_process(
         * d_arg["rl"]["train_total_timesteps"]
     )
     env_info_queue.put(d_arg_env)  # I regive to my main process d_arg_env
-    encoder_local = FeatureExtractor(
-        cfg=d_arg_env,
-        neural_architecture_image=d_arg.get("neural_architecture_image", "impala"),
-    ).cpu()
+    ae_local = VAEImpala(cfg=d_arg_env).cpu()
     actor_local = Actor(d_arg_env).cpu()
-    if d_arg_env["is_graph"]:
-        obs_nn = obs_to_pyg(obs, "cpu")
-    else:
-        obs_nn = torch.from_numpy(obs).cpu()
-
-    _, _, _ = actor_local.get_action(encoder_local(obs_nn))
+    obs_nn = torch.from_numpy(obs).cpu()
+    z = ae_local.encode(obs_nn)
+    z = z.view(z.size(0), -1)
+    _, _, _ = actor_local.get_action(z)
     actor_local.eval()
     num_envs = envs.num_envs
     pending_mode = "train"
@@ -124,10 +93,10 @@ def actor_process(
                 if "scalars" not in d_arg_env["observation_mode"]:
                     new_params_encoder = encoder_queue.get_nowait()
                     try:
-                        encoder_local.load_state_dict(new_params_encoder)
+                        ae_local.encoder.load_state_dict(new_params_encoder)
                     except Exception:
                         # if state_dict was saved on CUDA, map_location might be required
-                        encoder_local.load_state_dict(
+                        ae_local.encoder.load_state_dict(
                             {k: v.cpu() for k, v in new_params_encoder.items()}
                         )
         except queue.Empty:
@@ -141,13 +110,10 @@ def actor_process(
         else:
             # Inference
             with torch.no_grad():
-                if d_arg_env["is_graph"]:
-                    obs = obs_to_pyg(obs, "cpu")
-                    obs_nn = encoder_local(obs)
-                else:
-                    obs = torch.from_numpy(obs).cpu()
-                obs_nn = encoder_local(obs)
-                actions_tensor, _, _ = actor_local.get_action(obs_nn)
+                obs = torch.from_numpy(obs).cpu()
+                z = ae_local.encode(obs)
+                z = z.view(z.size(0), -1)
+                actions_tensor, _, _ = actor_local.get_action(z)
                 actions = actions_tensor.cpu().numpy()
 
         # Step envs
@@ -188,17 +154,12 @@ def actor_process(
 
             info = infos[i]
             done = dones[i]
-
-            if d_arg_env["is_graph"]:
-                o = {k: v[i] for k, v in obs.items()}
-                no = {k: v[i] for k, v in next_obs.items()}
-            else:
-                o = obs[i].copy() if isinstance(obs[i], np.ndarray) else obs[i]
-                no = (
-                    next_obs[i].copy()
-                    if isinstance(next_obs[i], np.ndarray)
-                    else next_obs[i]
-                )
+            o = obs[i].copy() if isinstance(obs[i], np.ndarray) else obs[i]
+            no = (
+                next_obs[i].copy()
+                if isinstance(next_obs[i], np.ndarray)
+                else next_obs[i]
+            )
 
             # send stats if episode ended
             if done:
@@ -238,6 +199,8 @@ def actor_process(
 
 
 def run_async_sac(d_arg):
+    if "img" not in d_arg["model"]["observation_mode"]:
+        raise "Error, you should only use state space related to image"
     device = torch.device(
         "cuda" if d_arg["simulation"]["cuda"] and torch.cuda.is_available() else "cpu"
     )
@@ -280,34 +243,21 @@ def run_async_sac(d_arg):
         state_type=d_arg_env["observation_space_dtype"],
         is_graph=d_arg_env["is_graph"],
     )
-    encoder = FeatureExtractor(
-        cfg=d_arg_env, neural_architecture_image=d_arg["neural_architecture_image"]
-    ).to(device)
+    vae = VAEImpala(cfg=d_arg_env).to(device)
     actor = Actor(d_arg_env).to(device)
     qf1 = QNetwork().to(device)
     qf2 = QNetwork().to(device)
     # Networks
-    if d_arg_env["is_graph"]:
-        dummy_graph = Data(
-            x=torch.zeros((1, d_arg_env["node_feature_dim"]), dtype=torch.float32),
-            edge_index=torch.zeros((2, 1), dtype=torch.long),
-            edge_attr=torch.zeros((1, 1), dtype=torch.float32),
-        )
-        dummy_state = Batch.from_data_list([dummy_graph]).to(device)
-    else:
-        dummy_state = torch.zeros(
-            (1, *d_arg_env["observation_space_shape"]),
-            device=device,
-            dtype=torch.float32,
-        )
-    dummy_state_encoded = encoder(dummy_state)
 
+    dummy_state = torch.zeros(
+        (1, *d_arg_env["observation_space_shape"]),
+        device=device,
+        dtype=torch.float32,
+    )
+    dummy_state_encoded = vae.encode(dummy_state)
+    dummy_state_encoded = dummy_state_encoded.view(dummy_state_encoded.size(0), -1)
     with torch.no_grad():
-        if d_arg_env["is_graph"]:
-            actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
-        else:
-            actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
-
+        actions_tensor, _, _ = actor.get_action(dummy_state_encoded)
         _ = qf1(dummy_state_encoded, actions_tensor)
         _ = qf2(dummy_state_encoded, actions_tensor)
 
@@ -325,11 +275,11 @@ def run_async_sac(d_arg):
 
     try:
         encoder_queue.put_nowait(
-            {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
+            {k: v.detach().cpu() for k, v in vae.encoder.state_dict().items()}
         )
     except queue.Full:
         encoder_queue.put(
-            {k: v.detach().cpu() for k, v in encoder.state_dict().items()}
+            {k: v.detach().cpu() for k, v in vae.encoder.state_dict().items()}
         )
     # send initial policy
     try:
@@ -338,8 +288,7 @@ def run_async_sac(d_arg):
         )
     except queue.Full:
         actor_queue.put({k: v.detach().cpu() for k, v in actor.state_dict().items()})
-    if "scalars" not in d_arg_env["observation_mode"]:
-        encoder_optimizer = optim.Adam(encoder.parameters(), lr=d_arg["rl"]["q_lr"])
+
     q_optimizer = optim.Adam(
         list(qf1.parameters()) + list(qf2.parameters()),
         lr=d_arg["rl"]["q_lr"],
@@ -423,17 +372,23 @@ def run_async_sac(d_arg):
                 reward = batch["reward"]
 
                 # ---------- Encode once ----------
-                z = encoder(state)
+                rec, z = vae(state)
+
+                # RL branch: detach to avoid memory issues
+                z_rl = z.view(z.size(0), -1).detach()
+
+                # Next state encoding (for target Q)
                 with torch.no_grad():
-                    z_next = encoder(next_state)
+                    rec_next, z_next = vae(next_state)
+                    z_next = z_next.view(z_next.size(0), -1)
+
+                state_pixels = state.div(255.0)
 
                 # ---------- Target Q ----------
                 with torch.no_grad():
                     next_actions, next_log_pi, _ = actor.get_action(z_next)
-
                     q1_next = qf1_target(z_next, next_actions)
                     q2_next = qf2_target(z_next, next_actions)
-
                     min_q_next = torch.min(q1_next, q2_next) - alpha * next_log_pi
                     next_q = (
                         reward.flatten()
@@ -443,26 +398,21 @@ def run_async_sac(d_arg):
                     )
 
                 # ---------- Critic ----------
-                q1 = qf1(z, action).view(-1)
-                q2 = qf2(z, action).view(-1)
-
+                q1 = qf1(z_rl, action).view(-1)
+                q2 = qf2(z_rl, action).view(-1)
                 qf_loss = F.mse_loss(q1, next_q) + F.mse_loss(q2, next_q)
 
-                # Zero gradients for ALL optimizers that will update
+                # Zero gradients for all optimizers that will update
                 q_optimizer.zero_grad()
-                encoder_optimizer.zero_grad() if "scalars" not in d_arg_env[
-                    "observation_mode"
-                ] else None
-
-                qf_loss.backward()  # Gradients flow to both Q-heads AND encoder
-
-                # Step both optimizers
+                # NOTE: encoder not part of RL gradient, so no need to zero encoder optimizer here
+                qf_loss.backward()
                 q_optimizer.step()  # Updates Q-heads
-                encoder_optimizer.step() if "scalars" not in d_arg_env[
-                    "observation_mode"
-                ] else None
 
                 grad_steps += 1
+
+                # ---------- vae update ----------
+                # Update encoder+decoder separately with reconstruction loss
+                vae.compute_reconstruction_loss(rec, state_pixels, z)
 
                 # Policy & alpha update
                 if grad_steps % d_arg["rl"]["policy_frequency"] == 0:
@@ -517,7 +467,7 @@ def run_async_sac(d_arg):
                         encoder_queue.put_nowait(
                             {
                                 k: v.detach().cpu()
-                                for k, v in encoder.state_dict().items()
+                                for k, v in vae.encoder.state_dict().items()
                             }
                         )
 
@@ -647,7 +597,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train_total_timesteps",
         type=int,
-        default=int(3e5),
+        default=int(2.5e5),
         help="Total timesteps for training",
     )
     parser.add_argument(
@@ -657,7 +607,7 @@ if __name__ == "__main__":
         "--num_envs", type=int, default=14, help="Parallel PhysiCell instances"
     )
     parser.add_argument(
-        "--buffer_size", type=int, default=int(3e5), help="Replay buffer size"
+        "--buffer_size", type=int, default=int(1e5), help="Replay buffer size"
     )
     parser.add_argument(
         "--batch_size_multiplier",
@@ -668,7 +618,7 @@ if __name__ == "__main__":
 
     # === Experiment Metadata ===
     parser.add_argument(
-        "--name", default="async_sac_tip_train_test", help="Experiment name"
+        "--name", default="async_sac_tip_train_test_vae", help="Experiment name"
     )
     parser.add_argument(
         "--wandb", default="true", help="Log to Weights & Biases? (true/false)"
@@ -708,7 +658,7 @@ if __name__ == "__main__":
 
     d_arg_wandb = {
         "entity": args.entity,
-        "project": "SAC_ASYNC_TRAIN_TEST_TIP_60min",
+        "project": "SAC_ASYNC_TRAIN_TEST_TIP_15min_VAE",
         "sync_tensorboard": True,
         "monitor_gym": True,
         "save_code": True,

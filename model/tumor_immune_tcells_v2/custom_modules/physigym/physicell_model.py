@@ -724,11 +724,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             self.c_prev = self.c_t
         self.nb_tumor = self.c_t
 
-        # update cell_1 cell count
-        self.nb_cell_1 = self.df_alive.loc[(self.df_alive.type == "cell_1"), :].shape[0]
-
-        # update cell_2 cell count
-        self.nb_cell_2 = self.df_alive.loc[(self.df_alive.type == "cell_2"), :].shape[0]
+        # update macrophage cell count
+        self.nb_m1 = self.df_alive.loc[(self.df_alive.type == "macrophage"), :].shape[0]
 
         # observe the environemnt
         if self.observation_mode == "scalars_cells":
@@ -1089,8 +1086,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         info = {
             "df_cell": self.df_cell,
             "number_tumor": self.nb_tumor,
-            "number_cell_1": self.nb_cell_1,
-            "number_cell_2": self.nb_cell_2,
+            "number_macrophage": self.nb_macrophage,
         }
 
         # output
