@@ -19,9 +19,9 @@ import wandb
 from tqdm import tqdm
 
 # Your project imports
-from vectorized_tip import vec_envs
-from nn_tip import Actor, QNetwork
-from rb_tip import ReplayBuffer
+from vectorized import vec_envs
+from networks import Actor, QNetwork
+from rb import ReplayBuffer
 
 
 from torch.multiprocessing import Event, Queue
