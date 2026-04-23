@@ -5,12 +5,12 @@
         <x_max>512.0</x_max>
         <y_min>-512.0</y_min>
         <y_max>512.0</y_max>
-        <z_min>-10.0</z_min>
-        <z_max>10.0</z_max>
+        <z_min>-8.0</z_min>
+        <z_max>8.0</z_max>
         <dx>16.0</dx>
         <dy>16.0</dy>
         <dz>16.0</dz>
-        <use_2D>false</use_2D>
+        <use_2D>true</use_2D>
     </domain>
 
     <overall>
@@ -57,69 +57,85 @@
     <microenvironment_setup>
         <variable name="debris_apoptotic" units="dimensionless" ID="0">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">100000.0</diffusion_coefficient>
-                <decay_rate units="1/min">10</decay_rate>
+                <diffusion_coefficient units="micron^2/min">71.1781539169154</diffusion_coefficient>
+                <decay_rate units="1/min">0.0</decay_rate>
             </physical_parameter_set>
-            <initial_condition units="mmHg">0</initial_condition>
-            <Dirichlet_boundary_condition units="mmHg" enabled="False">0</Dirichlet_boundary_condition>
+            <initial_condition units="mmHg">0.0</initial_condition>
+            <Dirichlet_boundary_condition units="mmHg" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False">0</boundary_value>
-                <boundary_value ID="xmax" enabled="False">0</boundary_value>
-                <boundary_value ID="ymin" enabled="False">0</boundary_value>
-                <boundary_value ID="ymax" enabled="False">0</boundary_value>
-                <boundary_value ID="zmin" enabled="False">0</boundary_value>
-                <boundary_value ID="zmax" enabled="False">0</boundary_value>
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="debris_necrotic" units="dimensionless" ID="1">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">0.0</diffusion_coefficient>
+                <diffusion_coefficient units="micron^2/min">71.1781539169154</diffusion_coefficient>
                 <decay_rate units="1/min">0.0</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False" />
-                <boundary_value ID="xmax" enabled="False" />
-                <boundary_value ID="ymin" enabled="False" />
-                <boundary_value ID="ymax" enabled="False" />
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="drug" units="dimensionless" ID="2">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">0.0</diffusion_coefficient>
-                <decay_rate units="1/min">0.0</decay_rate>
+                <diffusion_coefficient units="micron^2/min">22398.9628885807</diffusion_coefficient>
+                <decay_rate units="1/min">0.1</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False" />
-                <boundary_value ID="xmax" enabled="False" />
-                <boundary_value ID="ymin" enabled="False" />
-                <boundary_value ID="ymax" enabled="False" />
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="cxcl10" units="dimensionless" ID="3">
             <physical_parameter_set>
-                <diffusion_coefficient units="micron^2/min">0.0</diffusion_coefficient>
-                <decay_rate units="1/min">0.0</decay_rate>
+                <diffusion_coefficient units="micron^2/min">7210.64672568082</diffusion_coefficient>
+                <decay_rate units="1/min">0.1</decay_rate>
             </physical_parameter_set>
             <initial_condition units="dimensionless">0.0</initial_condition>
             <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
             <Dirichlet_options>
-                <boundary_value ID="xmin" enabled="False" />
-                <boundary_value ID="xmax" enabled="False" />
-                <boundary_value ID="ymin" enabled="False" />
-                <boundary_value ID="ymax" enabled="False" />
-                <boundary_value ID="zmin" enabled="False" />
-                <boundary_value ID="zmax" enabled="False" />
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
         <variable name="il12" units="dimensionless" ID="4">
+            <physical_parameter_set>
+                <diffusion_coefficient units="micron^2/min">3737.75954396979</diffusion_coefficient>
+                <decay_rate units="1/min">0.1</decay_rate>
+            </physical_parameter_set>
+            <initial_condition units="dimensionless">0.0</initial_condition>
+            <Dirichlet_boundary_condition units="dimensionless" enabled="False">0.0</Dirichlet_boundary_condition>
+            <Dirichlet_options>
+                <boundary_value ID="xmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="xmax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="ymax" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmin" enabled="False">0.0</boundary_value>
+                <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
+            </Dirichlet_options>
+        </variable>
+        <variable name="t_cd8_arrival_prob" units="dimensionless" ID="5">
             <physical_parameter_set>
                 <diffusion_coefficient units="micron^2/min">0.0</diffusion_coefficient>
                 <decay_rate units="1/min">0.0</decay_rate>
@@ -193,9 +209,9 @@
                     </model>
                 </death>
                 <volume>
-                    <total units="micron^3">2494</total>
+                    <total units="micron^3">1596</total>
                     <fluid_fraction units="dimensionless">0.75</fluid_fraction>
-                    <nuclear units="micron^3">540</nuclear>
+                    <nuclear units="micron^3">345.620854578796</nuclear>
                     <fluid_change_rate units="1/min">0.05</fluid_change_rate>
                     <cytoplasmic_biomass_change_rate units="1/min">0.0045</cytoplasmic_biomass_change_rate>
                     <nuclear_biomass_change_rate units="1/min">0.0055</nuclear_biomass_change_rate>
@@ -224,8 +240,8 @@
                 </mechanics>
                 <motility>
                     <speed units="micron/min">1.0</speed>
-                    <persistence_time units="min">1.0</persistence_time>
-                    <migration_bias units="dimensionless">0.0</migration_bias>
+                    <persistence_time units="min">5.0</persistence_time>
+                    <migration_bias units="dimensionless">0.5</migration_bias>
                     <options>
                         <enabled>false</enabled>
                         <use_2D>true</use_2D>
@@ -243,6 +259,7 @@
                                 <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
                     </options>
@@ -273,6 +290,12 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="il12">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="t_cd8_arrival_prob">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -338,7 +361,7 @@
             <phenotype>
                 <cycle code="5" name="live">
                     <phase_transition_rates units="1/min">
-                        <rate start_index="0" end_index="0" fixed_duration="false">0.00072</rate>
+                        <rate start_index="0" end_index="0" fixed_duration="false">0.0</rate>
                     </phase_transition_rates>
                     <standard_asymmetric_division enabled="False">
                         <asymmetric_division_probability name="epithelial" units="dimensionless">0</asymmetric_division_probability>
@@ -349,7 +372,7 @@
                 </cycle>
                 <death>
                     <model code="100" name="apoptosis">
-                        <death_rate units="1/min">5.31667e-05</death_rate>
+                        <death_rate units="1/min">0.0</death_rate>
                         <phase_transition_rates units="1/min">
                             <rate start_index="0" end_index="1" fixed_duration="false">0.001938</rate>
                         </phase_transition_rates>
@@ -379,9 +402,9 @@
                     </model>
                 </death>
                 <volume>
-                    <total units="micron^3">2494</total>
+                    <total units="micron^3">524</total>
                     <fluid_fraction units="dimensionless">0.75</fluid_fraction>
-                    <nuclear units="micron^3">540</nuclear>
+                    <nuclear units="micron^3">113.369422142374</nuclear>
                     <fluid_change_rate units="1/min">0.05</fluid_change_rate>
                     <cytoplasmic_biomass_change_rate units="1/min">0.0045</cytoplasmic_biomass_change_rate>
                     <nuclear_biomass_change_rate units="1/min">0.0055</nuclear_biomass_change_rate>
@@ -429,6 +452,7 @@
                                 <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
                     </options>
@@ -459,6 +483,12 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="il12">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="t_cd8_arrival_prob">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -513,7 +543,7 @@
             <phenotype>
                 <cycle code="5" name="live">
                     <phase_transition_rates units="1/min">
-                        <rate start_index="0" end_index="0" fixed_duration="false">0.00072</rate>
+                        <rate start_index="0" end_index="0" fixed_duration="false">0.0</rate>
                     </phase_transition_rates>
                     <standard_asymmetric_division enabled="False">
                         <asymmetric_division_probability name="epithelial" units="dimensionless">0</asymmetric_division_probability>
@@ -524,7 +554,7 @@
                 </cycle>
                 <death>
                     <model code="100" name="apoptosis">
-                        <death_rate units="1/min">5.31667e-05</death_rate>
+                        <death_rate units="1/min">0.0</death_rate>
                         <phase_transition_rates units="1/min">
                             <rate start_index="0" end_index="1" fixed_duration="false">0.001938</rate>
                         </phase_transition_rates>
@@ -554,9 +584,9 @@
                     </model>
                 </death>
                 <volume>
-                    <total units="micron^3">2494</total>
+                    <total units="micron^3">524</total>
                     <fluid_fraction units="dimensionless">0.75</fluid_fraction>
-                    <nuclear units="micron^3">540</nuclear>
+                    <nuclear units="micron^3">113.369422142374</nuclear>
                     <fluid_change_rate units="1/min">0.05</fluid_change_rate>
                     <cytoplasmic_biomass_change_rate units="1/min">0.0045</cytoplasmic_biomass_change_rate>
                     <nuclear_biomass_change_rate units="1/min">0.0055</nuclear_biomass_change_rate>
@@ -604,6 +634,7 @@
                                 <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
                     </options>
@@ -634,6 +665,12 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="il12">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="t_cd8_arrival_prob">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -715,7 +752,7 @@
                     <model code="101" name="necrosis">
                         <death_rate units="1/min">0.0</death_rate>
                         <phase_transition_rates units="1/min">
-                            <rate start_index="0" end_index="1" fixed_duration="false">9e9</rate>
+                            <rate start_index="0" end_index="1" fixed_duration="false">9000000000.0</rate>
                             <rate start_index="1" end_index="2" fixed_duration="true">1.15741e-05</rate>
                         </phase_transition_rates>
                         <parameters>
@@ -729,9 +766,9 @@
                     </model>
                 </death>
                 <volume>
-                    <total units="micron^3">2494</total>
+                    <total units="micron^3">130</total>
                     <fluid_fraction units="dimensionless">0.75</fluid_fraction>
-                    <nuclear units="micron^3">540</nuclear>
+                    <nuclear units="micron^3">28.1475541299118</nuclear>
                     <fluid_change_rate units="1/min">0.05</fluid_change_rate>
                     <cytoplasmic_biomass_change_rate units="1/min">0.0045</cytoplasmic_biomass_change_rate>
                     <nuclear_biomass_change_rate units="1/min">0.0055</nuclear_biomass_change_rate>
@@ -779,6 +816,7 @@
                                 <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
                             </chemotactic_sensitivities>
                         </advanced_chemotaxis>
                     </options>
@@ -809,6 +847,12 @@
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
                     <substrate name="il12">
+                        <secretion_rate units="1/min">0.0</secretion_rate>
+                        <secretion_target units="substrate density">1.0</secretion_target>
+                        <uptake_rate units="1/min">0.0</uptake_rate>
+                        <net_export_rate units="total substrate/min">0.0</net_export_rate>
+                    </substrate>
+                    <substrate name="t_cd8_arrival_prob">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -882,6 +926,16 @@
         <number_of_cells type="int" units="none" description="initial number of cells (for each cell type)">5</number_of_cells>
         <time type="double" units="min" description="necessary for PhysiGym, never delete!">0.0</time>
         <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">60.0</dt_gym>
+        <fraction_of_voxels_arriving_cells type="double" units="none" description="fraction of voxels with arriving cells">0</fraction_of_voxels_arriving_cells>
+        <max_arrival_rate_t_cd8 type="double" units="1/min" description="maximal arrival rate of t_cd8">0.1</max_arrival_rate_t_cd8>
+        <arrival_signal_substrate_t_cd8 type="string" units="none" description="substrate that triggers t_cd8 arrival or none">none</arrival_signal_substrate_t_cd8>
+        <arrival_signal_half_max_t_cd8 type="double" units="substrate density" description="half-maximal concentration of arrival signal for t_cd8s">0.1</arrival_signal_half_max_t_cd8>
+        <arrival_signal_power_t_cd8 type="int" units="none" description="Hill coefficient of arrival signal for t_cd8s">1.0</arrival_signal_power_t_cd8>
+        <fraction_of_voxels_departing_cells type="double" units="none" description="fraction of voxels with departing cells">0</fraction_of_voxels_departing_cells>
+        <max_departure_rate_dc type="double" units="1/min" description="maximal departure rate of dendritic cells">0.1</max_departure_rate_dc>
+        <departure_signal_substrate_dc type="string" units="none" description="substrate that triggers dendritic cells departure or none">none</departure_signal_substrate_dc>
+        <departure_signal_half_max_dc type="double" units="substrate density" description="half-maximal concentration of arrival signal for dendritic cells">0.1</departure_signal_half_max_dc>
+        <departure_signal_power_dc type="int" units="none" description="Hill coefficient of departure signal for dendritic cells">1.0</departure_signal_power_dc>
         <my_float type="double" units="none" description="">0.0</my_float>
         <my_int type="int" units="none" description="">0</my_int>
         <my_bool type="bool" units="none" description="">false</my_bool>
