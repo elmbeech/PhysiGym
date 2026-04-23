@@ -158,9 +158,10 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             img_mc_grid_size_y=img_mc_grid_size_y,
             normalization_factor=normalization_factor,
         )
-        self.lambda_dt = float(
-            self.x_root.xpath("//user_parameters/growth_rate")[0].text
-        ) * float(self.x_root.xpath("//user_parameters/dt_gym")[0].text)
+        # bea 20260423:
+        #self.lambda_dt = float(
+        #    self.x_root.xpath("//user_parameters/growth_rate")[0].text
+        #) * float(self.x_root.xpath("//user_parameters/dt_gym")[0].text)
 
     def get_action_space(self):
         """
@@ -1147,12 +1148,27 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         description:
             cost function.
         """
+        i_cellcount_target = physicell.get_parameter("cell_count_target")
+        i_max = i_cellcount_target * 2
+        i_cellcount_real = np.clip(physicell.get_parameter("cell_count_real"), a_min=0, a_max=i_max)
+        if (i_cellcount_real == i_cellcount_target):
+            r_reward = 1
+        elif (i_cellcount_real < i_cellcount_target):
+            # bue: maybe lineaize exponetial growth
+            r_reward = i_cellcount_real / i_cellcount_target
+        elif (i_cellcount_real > i_cellcount_target):
+            # bue: maube linearize exponetial decay
+            r_reward = 1 - (i_cellcount_real - i_cellcount_target) / i_cellcount_target
+        else:
+            sys.exit(f"Error @ CorePhysiCellEnv.get_reward : strange clipped cell count detected {i_cellcount_real}.")
 
-        expected_growth = self.c_prev * (np.exp(self.lambda_dt) - 1.0)
-        expected_growth = max(expected_growth, 1e-8)
+        return r_reward
 
-        r_tumor = (self.c_prev - self.c_t) / expected_growth
-        return 1 / (1 + np.exp(-r_tumor))
+
+
+
+        r_reward = physicell.growth_rate  
+        return r_reward
 
     def get_img(self):
         """

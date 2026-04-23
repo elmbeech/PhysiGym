@@ -936,9 +936,7 @@
         <departure_signal_substrate_dc type="string" units="none" description="substrate that triggers dendritic cells departure or none">none</departure_signal_substrate_dc>
         <departure_signal_half_max_dc type="double" units="substrate density" description="half-maximal concentration of arrival signal for dendritic cells">0.1</departure_signal_half_max_dc>
         <departure_signal_power_dc type="int" units="none" description="Hill coefficient of departure signal for dendritic cells">1.0</departure_signal_power_dc>
-        <my_float type="double" units="none" description="">0.0</my_float>
-        <my_int type="int" units="none" description="">0</my_int>
-        <my_bool type="bool" units="none" description="">false</my_bool>
-        <my_str type="string" units="none" description="">abc</my_str>
+        <cell_count_target type="int" units="none" description="">1024</cell_count_target>
+        <cell_count_real type="int" units="none" description="">0</cell_count_real>
     </user_parameters>
 </PhysiCell_settings>
