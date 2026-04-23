@@ -18,8 +18,8 @@
 using namespace BioFVM;
 
 #include <algorithm> // for std::find
-std::vector<int> arrival_voxel_indexes = {0,1,2,3}; // vector to store the indexes of each voxel to be an arrival spot
-std::vector<int> departure_voxel_indexes = {4092,4093,4094,4095}; // vector to store the indexes of each voxel to be an departure spot
+std::vector<int> arrival_voxel_indexes;  //= {0,1,2,3}; // vector to store the indexes of each voxel to be an arrival spot
+std::vector<int> departure_voxel_indexes;  //= {4092,4093,4094,4095}; // vector to store the indexes of each voxel to be an departure spot
 
 // constantes variables
 //static const double ZERO = 0;
@@ -233,9 +233,9 @@ void cell_arrival_function(double dt) {
         // no arrival substrate, half max or signal power defined for this cell type
         if ((parameters.strings.find_index(arrival_substrate_name) <= -1 ) || (parameters.doubles.find_index(arrival_half_max_name) <= -1) || (parameters.ints.find_index(arrival_signal_power_name) <= -1)) {
             std::cout << "Error: no arrival substrate, half max or signal power defined for this cell type!" << pCD->name << std::endl;
-            std::cout << "Add in user parameters: arrival_signal_half_max_"<<pCD->name << " (type double)."<< std::endl;
-            std::cout << "Add in user parameters: arrival_signal_substrate_"<<pCD->name << " (type string)."<< std::endl;
-            std::cout << "Add in user parameters: arrival_signal_power_"<<pCD->name <<" (type int)."<< std::endl;
+            std::cout << "Add in user parameters: arrival_signal_half_max_" << pCD->name << " (type double)." << std::endl;
+            std::cout << "Add in user parameters: arrival_signal_substrate_" << pCD->name << " (type string)." << std::endl;
+            std::cout << "Add in user parameters: arrival_signal_power_" << pCD->name << " (type int)." << std::endl;
             exit(-1);
         }
         else { no_signal = true; }  // no arrival substrate defined for this cell type
@@ -444,59 +444,33 @@ void setup_tissue(void) {
     //}
 
     // heber 20250000
-    // create substrates of the probability of arrival for each cell type -
-    // Review a way to create the substrate, HERE AND NOT IN setup_microenvironment because we need to know the number of cells of each type
+    // check for each cell type if a substrates of the probability of arrival exist.
     std::string arrival_rate_name;
     for (int k=0; k < cell_definitions_by_index.size() ; k++) {
         Cell_Definition* pCD = cell_definitions_by_index[k];
         arrival_rate_name = "max_arrival_rate_" + pCD->name;
-        // if no arrival rate is defined do not create the substrate
+        // if no arrival rate is defined do not check for the substrate
         if (parameters.doubles.find_index(arrival_rate_name) <= -1) { continue; }
         if (microenvironment.find_density_index(pCD->name+"_arrival_prob") == -1) {
             std::cout << "Error: no substrate of the probability of arrival defined!" << std::endl;
             std::cout << "Add a substrate " << pCD->name << "_arrival_prob." << std::endl;
             exit(-1);
         }
-         std::cout << "Creating substrate of the probability of arrival for cell type " << pCD->name << " ... " << std::endl;
-         microenvironment.add_density(pCD->name+"_arrival_prob", "dimensionless" );
-         // No diffusion nor decay for the probability of arrival
-         microenvironment.diffusion_coefficients[ microenvironment.find_density_index(pCD->name+"_arrival_prob") ] = 0;
-         microenvironment.decay_rates[ microenvironment.find_density_index(pCD->name+"_arrival_prob") ] = 0;
-         // No boundary conditions for the probability of arrival
-         microenvironment.set_substrate_dirichlet_activation( microenvironment.find_density_index(pCD->name+"_arrival_prob"),  false );
-         microenvironment.display_information( std::cout );
-         // IC for the probability of arrival
-         for( unsigned int n = 0; n < arrival_voxel_indexes.size(); n++){
-             microenvironment.density_vector(arrival_voxel_indexes[n])[microenvironment.find_density_index(pCD->name+"_arrival_prob")] = 0.0;
-         }
     }
 
     // heber 20250000
-    // create substrates of the probability of departure for each cell type -
-    // Review a way to create the substrate, HERE AND NOT IN setup_microenvironment because we need to know the number of cells of each type
+    // check for each cell type if a substrates of the probability of departure exist.
     std::string departure_rate_name;
     for (int k=0; k < cell_definitions_by_index.size() ; k++) {
         Cell_Definition* pCD = cell_definitions_by_index[k];
         departure_rate_name = "max_departure_rate_" + pCD->name;
-        // if no departure rate is defined do not create the substrate
+        // if no departure rate is defined do not check for the substrate
         if (parameters.doubles.find_index(departure_rate_name) <= -1) { continue; }
         if (microenvironment.find_density_index(pCD->name+"_departure_prob") == -1) {
             std::cout << "Error: no substrate of the probability of departure defined!" << std::endl;
             std::cout << "Add a substrate " << pCD->name << "_departure_prob." << std::endl;
             exit(-1);
         }
-    //     std::cout << "Creating substrate of the probability of departure for cell type " << pCD->name << " ... " << std::endl;
-    //     microenvironment.add_density(pCD->name+"_departure_prob", "dimensionless" );
-    //     // No diffusion nor decay for the probability of departure
-    //     microenvironment.diffusion_coefficients[ microenvironment.find_density_index(pCD->name+"_departure_prob") ] = 0;
-    //     microenvironment.decay_rates[ microenvironment.find_density_index(pCD->name+"_departure_prob") ] = 0;
-    //     // No boundary conditions for the probability of departure
-    //     microenvironment.set_substrate_dirichlet_activation( microenvironment.find_density_index(pCD->name+"_departure_prob"),  false );
-    //     microenvironment.display_information( std::cout );
-    //     // IC for the probability of departure
-    //     for( unsigned int n = 0; n < departure_voxel_indexes.size(); n++){
-    //         microenvironment.density_vector(departure_voxel_indexes[n])[microenvironment.find_density_index(pCD->name+"_depa/rture_prob")] = 0.0;
-    //     }
     }
 
     return;
@@ -606,4 +580,3 @@ void efferocytosis(double dt) {
     }
     return;
 }
-

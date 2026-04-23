@@ -926,12 +926,12 @@
         <number_of_cells type="int" units="none" description="initial number of cells (for each cell type)">5</number_of_cells>
         <time type="double" units="min" description="necessary for PhysiGym, never delete!">0.0</time>
         <dt_gym type="double" units="min" description="necessary for PhysiGym, never delete!">60.0</dt_gym>
-        <fraction_of_voxels_arriving_cells type="double" units="none" description="fraction of voxels with arriving cells">0</fraction_of_voxels_arriving_cells>
-        <max_arrival_rate_t_cd8 type="double" units="1/min" description="maximal arrival rate of t_cd8">0.1</max_arrival_rate_t_cd8>
+        <fraction_of_voxels_arriving_cells type="double" units="none" description="fraction of voxels with arriving cells">0.1</fraction_of_voxels_arriving_cells>
+        <max_arrival_rate_t_cd8 type="double" units="1/min" description="maximal arrival rate of t_cd8">0.001</max_arrival_rate_t_cd8>
         <arrival_signal_substrate_t_cd8 type="string" units="none" description="substrate that triggers t_cd8 arrival or none">none</arrival_signal_substrate_t_cd8>
         <arrival_signal_half_max_t_cd8 type="double" units="substrate density" description="half-maximal concentration of arrival signal for t_cd8s">0.1</arrival_signal_half_max_t_cd8>
         <arrival_signal_power_t_cd8 type="int" units="none" description="Hill coefficient of arrival signal for t_cd8s">1.0</arrival_signal_power_t_cd8>
-        <fraction_of_voxels_departing_cells type="double" units="none" description="fraction of voxels with departing cells">0</fraction_of_voxels_departing_cells>
+        <fraction_of_voxels_departing_cells type="double" units="none" description="fraction of voxels with departing cells">0.0</fraction_of_voxels_departing_cells>
         <max_departure_rate_dc type="double" units="1/min" description="maximal departure rate of dendritic cells">0.1</max_departure_rate_dc>
         <departure_signal_substrate_dc type="string" units="none" description="substrate that triggers dendritic cells departure or none">none</departure_signal_substrate_dc>
         <departure_signal_half_max_dc type="double" units="substrate density" description="half-maximal concentration of arrival signal for dendritic cells">0.1</departure_signal_half_max_dc>
