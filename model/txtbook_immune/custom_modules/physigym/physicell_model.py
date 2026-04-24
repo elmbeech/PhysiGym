@@ -714,16 +714,19 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         # update tumor cell count
         self.c_prev = self.c_t
-        self.c_t = self.df_alive.loc[(self.df_alive.type == "tumor"), :].shape[0]
+        self.c_t = self.df_alive.loc[(self.df_alive.type == "epithelial"), :].shape[0]
         if self.c_prev is None:
             self.c_prev = self.c_t
         self.nb_tumor = self.c_t
 
         # update m1 cell count
-        self.nb_m1 = self.df_alive.loc[(self.df_alive.type == "m1"), :].shape[0]
+        self.nb_m1 = self.df_alive.loc[(self.df_alive.type == "mac_m1"), :].shape[0]
 
         # update m2 cell count
-        self.nb_m2 = self.df_alive.loc[(self.df_alive.type == "m2"), :].shape[0]
+        self.nb_m2 = self.df_alive.loc[(self.df_alive.type == "mac_m2"), :].shape[0]
+
+        # update t cd8 cell count
+        self.nb_tcd8 = self.df_alive.loc[(self.df_alive.type == "t_cd8"), :].shape[0]
 
         # observe the environemnt
         if self.observation_mode == "scalars_cells":
@@ -1151,17 +1154,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             # bue: maybe lineaize exponetial growth
             r_reward = i_cellcount_real / i_cellcount_target
         elif (i_cellcount_real > i_cellcount_target):
-            # bue: maube linearize exponetial decay
+            # bue: maybe linearize exponetial decay
             r_reward = 1 - (i_cellcount_real - i_cellcount_target) / i_cellcount_target
         else:
             sys.exit(f"Error @ CorePhysiCellEnv.get_reward : strange clipped cell count detected {i_cellcount_real}.")
 
-        return r_reward
-
-
-
-
-        r_reward = physicell.growth_rate  
         return r_reward
 
     def get_img(self):
