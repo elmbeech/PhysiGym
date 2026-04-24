@@ -185,7 +185,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         # model dependent action_space processing logic goes here!
         d_action_space = spaces.Dict(
             {
-                "drug_1": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                "shikonin": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
             }
         )
 
@@ -219,7 +219,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         if self.observation_mode == "scalars_cells":
             o_observation_space = spaces.Box(
                 low=-(2**8),
-                high=2**8,
+                high=(2**8 - 1),
                 shape=(self.cell_type_count * 2,),
                 dtype=np.float32,
             )
@@ -227,7 +227,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         elif self.observation_mode == "scalars_substrates":
             o_observation_space = spaces.Box(
                 low=-(2**8),
-                high=2**8,
+                high=(2**8 - 1),
                 shape=(self.substrate_count,),
                 dtype=np.float32,
             )
@@ -235,20 +235,17 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         elif self.observation_mode in "scalars_cells_substrates":
             o_observation_space = spaces.Box(
                 low=-(2**8),
-                high=2**8,
+                high=(2**8 -1),
                 shape=(self.cell_type_count * 2 + self.substrate_count,),
                 dtype=np.float32,
             )
 
         elif observation_mode in [
-            f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
-            f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
-            f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
-        ]:
-            if (
-                observation_mode
-                == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
-            ):
+                f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+                f"img_mc_cells_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+                f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}",
+            ]:
+            if (observation_mode == f"img_mc_cells_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"):
                 o_observation_space = spaces.Box(
                     low=0,
                     high=255,
@@ -259,10 +256,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
                     ),
                     dtype=np.uint8,
                 )
-            elif (
-                observation_mode
-                == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"
-            ):
+            elif (observation_mode == f"img_mc_substrates_{self.kwargs['img_mc_grid_size_x']}_{self.kwargs['img_mc_grid_size_y']}"):
                 o_observation_space = spaces.Box(
                     low=0,
                     high=255,
@@ -1338,7 +1332,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             )  # invert y for OpenCV coords
 
         # Draw action bar
-        action_space = self.get_action_space()["drug_1"]
+        action_space = self.get_action_space()["shikonin"]
         action_min, action_max = float(action_space.low[0]), float(action_space.high[0])
         action_scaled = int(
             ((action_value - action_min) / (action_max - action_min)) * canvas_height

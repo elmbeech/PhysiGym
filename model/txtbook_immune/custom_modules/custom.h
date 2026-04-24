@@ -36,3 +36,4 @@ void contact_function(Cell* pMe, Phenotype& phenoMe, Cell* pOther, Phenotype& ph
 // implementations.
 void cell_arrival_function(double dt);
 void cell_departure_function(double dt);
+int add_substrate(std::string s_substrate, double r_dose);

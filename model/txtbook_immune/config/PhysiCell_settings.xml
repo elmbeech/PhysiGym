@@ -36,7 +36,7 @@
             <interval units="min">60</interval>
             <enable>true</enable>
             <plot_substrate enabled="true" limits="false">
-                <substrate>drug</substrate>
+                <substrate>shikonin</substrate>
                 <colormap>turbo</colormap>
                 <min_conc>0</min_conc>
                 <max_conc>1</max_conc>
@@ -87,7 +87,7 @@
                 <boundary_value ID="zmax" enabled="False">0.0</boundary_value>
             </Dirichlet_options>
         </variable>
-        <variable name="drug" units="dimensionless" ID="2">
+        <variable name="shikonin" units="dimensionless" ID="2">
             <physical_parameter_set>
                 <diffusion_coefficient units="micron^2/min">22398.9628885807</diffusion_coefficient>
                 <decay_rate units="1/min">0.1</decay_rate>
@@ -256,7 +256,7 @@
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris_apoptotic">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="debris_necrotic">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="shikonin">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
@@ -277,7 +277,7 @@
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="drug">
+                    <substrate name="shikonin">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -449,7 +449,7 @@
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris_apoptotic">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="debris_necrotic">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="shikonin">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
@@ -470,7 +470,7 @@
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="drug">
+                    <substrate name="shikonin">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -631,7 +631,7 @@
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris_apoptotic">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="debris_necrotic">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="shikonin">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
@@ -652,7 +652,7 @@
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="drug">
+                    <substrate name="shikonin">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -813,7 +813,7 @@
                             <chemotactic_sensitivities>
                                 <chemotactic_sensitivity substrate="debris_apoptotic">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="debris_necrotic">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="drug">0.0</chemotactic_sensitivity>
+                                <chemotactic_sensitivity substrate="shikonin">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="cxcl10">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="il12">0.0</chemotactic_sensitivity>
                                 <chemotactic_sensitivity substrate="t_cd8_arrival_prob">0.0</chemotactic_sensitivity>
@@ -834,7 +834,7 @@
                         <uptake_rate units="1/min">0.0</uptake_rate>
                         <net_export_rate units="total substrate/min">0.0</net_export_rate>
                     </substrate>
-                    <substrate name="drug">
+                    <substrate name="shikonin">
                         <secretion_rate units="1/min">0.0</secretion_rate>
                         <secretion_target units="substrate density">1.0</secretion_target>
                         <uptake_rate units="1/min">0.0</uptake_rate>
@@ -938,5 +938,6 @@
         <departure_signal_power_dc type="int" units="none" description="Hill coefficient of departure signal for dendritic cells">1.0</departure_signal_power_dc>
         <cell_count_target type="int" units="none" description="">1024</cell_count_target>
         <cell_count_real type="int" units="none" description="">0</cell_count_real>
+        <shikonin_dose type="double" units="none" description="">0.0</shikonin_dose>
     </user_parameters>
 </PhysiCell_settings>

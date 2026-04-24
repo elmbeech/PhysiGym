@@ -237,6 +237,7 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
                 //my_function( parameters.ints("my_int")) );
                 //my_function( parameters.doubles("my_float") );
                 //my_function( parameters.strings("my_str") );
+                add_substrate("shikonin", parameters.doubles("shikonin_dose"));
 
                 // custom variable
                 //std::string my_variable = "my_variable";
@@ -279,6 +280,7 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
                 //parameters.ints("my_int") = value;
                 //parameters.doubles("my_float") = value;
                 //parameters.strings("my_str") = value;
+                parameters.ints("cell_count_real") = (*all_cells).size();  // bue 20260423: use physicell_get_cell
 
                 // custom variable
                 //std::string my_variable = "my_variable";
@@ -320,6 +322,9 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
             }
 
             // on diffusion time step
+            efferocytosis(diffusion_dt);  // bue 20251014
+            cell_arrival_function(diffusion_dt);  // heber 20250000
+            //cell_departure_function(diffusion_dt);  // heber 20250000
 
             // Put diffusion time scale code here!
             //std::cout << "processing diffusion time step observation block ... " << std::endl << std::endl;
