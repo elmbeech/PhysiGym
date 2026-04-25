@@ -169,6 +169,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             + physicell.get_parameter("my_parameter")
             + physicell.get_variable("my_variable")
             + physicell.get_vector("my_vector")
+            + physicell.get_cell()
+            + physicell.get_microenv()
             however, there are no limits.
         """
         # model dependent observation processing logic goes here!

@@ -143,12 +143,11 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         """
         # model dependent observation_space processing logic goes here!
         if self.observation_mode == "scalars_cells":
+            # bea 20260424: self.cell_type_count * 2 means we also count the dead cells if only self.cell_type_count only alive cells are taken in consideration
             o_observation_space = spaces.Box(
                 low=0,
                 high=(2**8 - 1),
-                shape=(
-                    self.cell_type_count * 2,
-                ),  # self.cell_type_count * 2 means we also count the dead cells if only self.cell_type_count  only alive cells are taken in consideration
+                shape=(self.cell_type_count * 3,),  # 3 = alive + apoptotic + necrotic
                 dtype=np.float32,
             )
 
@@ -177,26 +176,29 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         return o_observation_space
 
     def get_cells_scalars(self):
-        # Initialize the array for both alive and dead counts
+        # initialize the array for both alive and dead counts
+        # bea 20260424: both alive and dead counts (n_types * 2,) if you do not want to count dead you should n_types*1
+        # 3 = cell_type + apoptotic + necrotic
         n_types = self.cell_type_count
-        a_norm_cell_count = np.zeros(
-            (n_types * 2,), dtype=np.float32
-        )  # both alive and dead counts (n_types * 2,) if you do not want to count dead you should n_types*1
-        norm_factor = self.kwargs["normalization_factor"]
+        a_norm_cell_count = np.zeros((n_types * 3,), dtype=np.float32)
 
         for s_cell_type, i_id in self.cell_type_to_id.items():
             # Store alive counts in the first half: [0 to n_types-1]
             a_norm_cell_count[i_id] = (
                 self.df_alive.loc[self.df_alive.type == s_cell_type].shape[0]
-                / norm_factor
+                / self.kwargs["normalization_factor"]
             )
 
             # Store dead counts in the second half: [n_types to 2*n_types-1]
             # We add n_types to the index to avoid overwriting
             # delete that if a_norm_cell_count = np.zeros((n_types * 1,), dtype=np.float32)
             a_norm_cell_count[i_id + n_types] = (
-                self.df_dead.loc[self.df_dead.type == s_cell_type].shape[0]
-                / norm_factor
+                self.df_apoptotic.loc[self.df_apoptotic.type == s_cell_type].shape[0]
+                / self.kwargs["normalization_factor"]
+            )
+            a_norm_cell_count[i_id + n_types] = (
+                self.df_necrotic.loc[self.df_necrotic.type == s_cell_type].shape[0]
+                / self.kwargs["normalization_factor"]
             )
 
         return a_norm_cell_count
@@ -207,7 +209,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         for i, s_subs in enumerate(self.substrate_unique):
             microenv = np.asarray(physicell.get_microenv(s_subs))
             values = microenv[:, -1]  # substrate column
-            a_substrate[i] = np.mean(values)  # you may change mean, max, min
+            a_substrate[i] = np.mean(values)  # you may change mean, median, max, min
 
         return a_substrate
 
@@ -227,6 +229,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             + physicell.get_parameter("my_parameter")
             + physicell.get_variable("my_variable")
             + physicell.get_vector("my_vector")
+            + physicell.get_cell()
+            + physicell.get_microenv()
             however, there are no limits.
         """
         # model dependent observation processing logic goes here!
@@ -235,8 +239,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         self.df_cell = pd.DataFrame(
             physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "apoptotic", "necrotic", "type"]
         )
-        self.df_dead = self.df_cell[self.df_cell["dead"] >= 0.1]
         self.df_alive = self.df_cell[self.df_cell["dead"] < 0.1]
+        self.df_apoptotic = self.df_cell[(self.df_cell["dead"] >= 0.1) & (self.df_cell["apoptotic"] >= 0.1)]
+        self.df_necrotic = self.df_cell[(self.df_cell["dead"] >= 0.1) & (self.df_cell["necrotic"] >= 0.1)]
 
         # observe the environemnt
         if self.observation_mode == "scalars_cells":
@@ -272,9 +277,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             the number of hearts (lives left) from our character.
         """
         # model dependent info processing logic goes here!
-        info = {
-            "number_epithelial": physicell.get_parameter("cell_count_real"),
-        }
+        info = {}
 
         # output
         return info
@@ -343,10 +346,8 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             r_reward = i_cellcount_real / i_cellcount_target  # reward inferior to 1
         elif i_cellcount_real > i_cellcount_target:
             # bue: maybe linearize exponetial decay
-            r_reward = (
-                1 - (i_cellcount_real - i_cellcount_target) / i_cellcount_target
-            )  # = (2*i_cellcount_target - i_cellcount_real)/i_cellcount_target
-            # r_reward = i_cellcount_target / i_cellcount_real  # reward inferior to 1
+            #r_reward = (1 - (i_cellcount_real - i_cellcount_target) / i_cellcount_target)
+            r_reward = i_cellcount_target / i_cellcount_real  # reward inferior to 1
         else:
             sys.exit(
                 f"Error @ CorePhysiCellEnv.get_reward : strange clipped cell count detected {i_cellcount_real}."
@@ -383,29 +384,13 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         # substrate data #
         ##################
 
-        # debris
+        # debris_apoptotic (blue)
         df_conc = pd.DataFrame(
-            physicell.get_microenv("debris"), columns=["x", "y", "z", "debris"]
+            physicell.get_microenv("debris_apoptotic"),
+            columns=["x", "y", "z", "debris_apoptotic"],
         )
         df_conc = df_conc.loc[df_conc.z == 0.0, :]
-        df_mesh = df_conc.pivot(index="y", columns="x", values="debris")
-        ax.contourf(
-            df_mesh.columns,
-            df_mesh.index,
-            df_mesh.values,
-            vmin=0.0,
-            vmax=1.0,
-            cmap="Reds",
-            alpha=1 / 3,
-        )
-
-        # pro-tumoral factor
-        df_conc = pd.DataFrame(
-            physicell.get_microenv("pro-tumoral factor"),
-            columns=["x", "y", "z", "pro-tumoral factor"],
-        )
-        df_conc = df_conc.loc[df_conc.z == 0.0, :]
-        df_mesh = df_conc.pivot(index="y", columns="x", values="pro-tumoral factor")
+        df_mesh = df_conc.pivot(index="y", columns="x", values="debris_apoptotic")
         ax.contourf(
             df_mesh.columns,
             df_mesh.index,
@@ -416,13 +401,29 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             alpha=1 / 3,
         )
 
-        # anti-tumoral factor
+        # debris_necrotic (red)
         df_conc = pd.DataFrame(
-            physicell.get_microenv("anti-tumoral factor"),
-            columns=["x", "y", "z", "anti-tumoral factor"],
+            physicell.get_microenv("debris_necrotic"), columns=["x", "y", "z", "debris_necrotic"]
         )
         df_conc = df_conc.loc[df_conc.z == 0.0, :]
-        df_mesh = df_conc.pivot(index="y", columns="x", values="anti-tumoral factor")
+        df_mesh = df_conc.pivot(index="y", columns="x", values="debris_necrotic")
+        ax.contourf(
+            df_mesh.columns,
+            df_mesh.index,
+            df_mesh.values,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="Reds",
+            alpha=1 / 3,
+        )
+
+        # cxcl10 (green)
+        df_conc = pd.DataFrame(
+            physicell.get_microenv("cxcl10"),
+            columns=["x", "y", "z", "cxcl10"],
+        )
+        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_mesh = df_conc.pivot(index="y", columns="x", values="cxcl10")
         ax.contourf(
             df_mesh.columns,
             df_mesh.index,
@@ -430,7 +431,24 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             vmin=0.0,
             vmax=1.0,
             cmap="Greens",
-            alpha=1 / 3,
+            alpha=1 / 4,
+        )
+
+        # il12 (purple)
+        df_conc = pd.DataFrame(
+            physicell.get_microenv("il12"),
+            columns=["x", "y", "z", "il12"],
+        )
+        df_conc = df_conc.loc[df_conc.z == 0.0, :]
+        df_mesh = df_conc.pivot(index="y", columns="x", values="il12")
+        ax.contourf(
+            df_mesh.columns,
+            df_mesh.index,
+            df_mesh.values,
+            vmin=0.0,
+            vmax=1.0,
+            cmap="Purples",
+            alpha=1 / 4,
         )
 
         ######################
@@ -448,12 +466,12 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         #############
 
         df_cell = pd.DataFrame(
-            physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "cell_type"]
+            physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "apoptotic", "necrotic", "type"]
         )
         df_cell = df_cell.loc[(df_cell.dead < 0.1), :]
         df_cell["color"] = None
         for s_cell_type, s_color in self.cell_type_to_color.items():
-            df_cell.loc[(df_cell.cell_type == s_cell_type), "color"] = s_color
+            df_cell.loc[(df_cell.type == s_cell_type), "color"] = s_color
         # df_variable = pd.DataFrame(physicell.get_variable("my_variable"), columns=["my_variable"])
         # df_cell = pd.merge(df_cell, df_variable, left_index=True, right_index=True, how="left")
         df_cell = df_cell.loc[df_cell.z == 0.0, :]
@@ -464,9 +482,9 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
             c="color",
             xlim=[self.x_min, self.x_max],
             ylim=[self.y_min, self.y_max],
-            #    vmin=0.0, vmax=1.0, cmap="viridis",
-            #    grid=True,
-            #    title=f"dt_self.kwargs['img_mc_grid_size_y']m env step {str(self.step_env).zfill(4)} episode {str(self.episode).zfill(3)} episode step {str(self.step_episode).zfill(3)} : {df_cell.shape[0]} [cell]",
+            # vmin=0.0, vmax=1.0, cmap="viridis",
+            # grid=True,
+            # title=f"dt_self.kwargs['img_mc_grid_size_y']m env step {str(self.step_env).zfill(4)} episode {str(self.episode).zfill(3)} episode step {str(self.step_episode).zfill(3)} : {df_cell.shape[0]} [cell]",
             ax=ax,
         )
 

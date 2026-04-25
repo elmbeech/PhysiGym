@@ -280,7 +280,6 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
                 //parameters.ints("my_int") = value;
                 //parameters.doubles("my_float") = value;
                 //parameters.strings("my_str") = value;
-                // bue 20260424: for epithelial cell count real use physicell_get_cell
 
                 // custom variable
                 //std::string my_variable = "my_variable";
