@@ -233,7 +233,7 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
 
         # get cell data frame
         self.df_cell = pd.DataFrame(
-            physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "type"]
+            physicell.get_cell(), columns=["ID", "x", "y", "z", "dead", "apoptotic", "necrotic", "type"]
         )
         self.df_dead = self.df_cell[self.df_cell["dead"] >= 0.1]
         self.df_alive = self.df_cell[self.df_cell["dead"] < 0.1]
@@ -298,6 +298,21 @@ class ModelPhysiCellEnv(CorePhysiCellEnv):
         """
         # model dependent terminated processing logic goes here!
         return True
+
+    def get_reset_values(self):
+        """
+        input:
+
+        output:
+
+        run:
+            internal function, user defined.
+
+        description:
+            function to reset model specific self.variables. e.g.:
+            self.my_variable = None
+        """
+        pass
 
     def get_reward(self):
         """

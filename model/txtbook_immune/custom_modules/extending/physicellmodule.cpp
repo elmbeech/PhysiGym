@@ -280,7 +280,7 @@ static PyObject* physicell_step(PyObject *self, PyObject *args) {
                 //parameters.ints("my_int") = value;
                 //parameters.doubles("my_float") = value;
                 //parameters.strings("my_str") = value;
-                parameters.ints("cell_count_real") = (*all_cells).size();  // bue 20260423: use physicell_get_cell
+                // bue 20260424: for epithelial cell count real use physicell_get_cell
 
                 // custom variable
                 //std::string my_variable = "my_variable";
@@ -675,13 +675,15 @@ static PyObject* physicell_get_cell(PyObject *self, PyObject *args) {
 
     for (int i=0; i < cell_count; i++) {
         Cell* pCell = (*all_cells)[i];
-        PyObject *pList = PyList_New(6);  // id, x, y, z, dead, cell_type
+        PyObject *pList = PyList_New(8);  // id, x, y, z, dead, apoptotic, necrotic, cell_type
         PyList_SetItem(pList, 0, PyLong_FromLong(pCell->ID)); // id
         PyList_SetItem(pList, 1, PyFloat_FromDouble(pCell->position[0])); // x
         PyList_SetItem(pList, 2, PyFloat_FromDouble(pCell->position[1])); // y
         PyList_SetItem(pList, 3, PyFloat_FromDouble(pCell->position[2])); // z
         PyList_SetItem(pList, 4, PyFloat_FromDouble(pCell->phenotype.death.dead)); // dead
-        PyList_SetItem(pList, 5, PyUnicode_FromString((pCell->type_name).c_str())); // cell_type
+        PyList_SetItem(pList, 5, PyFloat_FromDouble(get_single_signal(pCell, "apoptotic"))); // apoptotic
+        PyList_SetItem(pList, 6, PyFloat_FromDouble(get_single_signal(pCell, "necrotic"))); // necrotic
+        PyList_SetItem(pList, 7, PyUnicode_FromString((pCell->type_name).c_str())); // cell_type
         PyList_SetItem(pLlist, i, pList);
     }
 

@@ -341,7 +341,9 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <my_variable conserved="false" units="dimensionless" description="">0</my_variable>
+                <debris_total conserved="false" units="standard_cell" description="">0.0</debris_total>
+                <engulfed_apoptotic conserved="false" units="standard_cell" description="">0.0</engulfed_apoptotic>
+                <engulfed_necrotic conserved="false" units="standard_cell" description="">0.0</engulfed_necrotic>
             </custom_data>
             <initial_parameter_distributions enabled="false">
                 <distribution enabled="false" type="Log10Normal" check_base="true">
@@ -534,7 +536,9 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <my_variable conserved="false" units="dimensionless" description="">0.0</my_variable>
+                <debris_total conserved="false" units="standard_cell" description="">0.0</debris_total>
+                <engulfed_apoptotic conserved="false" units="standard_cell" description="">0.0</engulfed_apoptotic>
+                <engulfed_necrotic conserved="false" units="standard_cell" description="">0.0</engulfed_necrotic>
             </custom_data>
             <initial_parameter_distributions enabled="false">
           </initial_parameter_distributions>
@@ -716,7 +720,9 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <my_variable conserved="false" units="dimensionless" description="">0.0</my_variable>
+                <debris_total conserved="false" units="standard_cell" description="">0.0</debris_total>
+                <engulfed_apoptotic conserved="false" units="standard_cell" description="">0.0</engulfed_apoptotic>
+                <engulfed_necrotic conserved="false" units="standard_cell" description="">0.0</engulfed_necrotic>
             </custom_data>
             <initial_parameter_distributions enabled="false">
           </initial_parameter_distributions>
@@ -898,7 +904,9 @@
                 </cell_integrity>
             </phenotype>
             <custom_data>
-                <my_variable conserved="false" units="dimensionless" description="">0.0</my_variable>
+                <debris_total conserved="false" units="standard_cell" description="">0.0</debris_total>
+                <engulfed_apoptotic conserved="false" units="standard_cell" description="">0.0</engulfed_apoptotic>
+                <engulfed_necrotic conserved="false" units="standard_cell" description="">0.0</engulfed_necrotic>
             </custom_data>
             <initial_parameter_distributions enabled="false">
           </initial_parameter_distributions>

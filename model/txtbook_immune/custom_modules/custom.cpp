@@ -38,28 +38,14 @@ std::vector<int> departure_voxel_indexes;  //= {4092,4093,4094,4095}; // vector 
 // setup debris function pointer
 static void (*debris_function)(Cell* pCell, std::vector<double>* export_rates) = NULL;
 
-// set this function to export all debris
-void debris_function_all(Cell* pCell, std::vector<double>* export_rates) {
-    set_single_behavior(pCell, "debris export", (*export_rates)[0]);
-    set_single_behavior(pCell, "debris_apoptotic export", (*export_rates)[1]);
-    set_single_behavior(pCell, "debris_necrotic export", (*export_rates)[2]);
-    return;
-}
-
-// set this function to export apoptotic and necrotic debris only
+// set this function to export apoptotic and necrotic debris
 void debris_function_apoptotic_necrotic(Cell* pCell, std::vector<double>* export_rates) {
     set_single_behavior(pCell, "debris_apoptotic export", (*export_rates)[1]);
     set_single_behavior(pCell, "debris_necrotic export", (*export_rates)[2]);
     return;
 }
 
-// set this function to do export to total debris only
-void debris_function_total(Cell* pCell, std::vector<double>* export_rates) {
-    set_single_behavior(pCell, "debris export" , (*export_rates)[0]);
-    return;
-}
-
-// set this function to export apoptotic debrsi only
+// set this function to export apoptotic debris only
 void debris_function_apoptotic(Cell* pCell, std::vector<double>* export_rates) {
     set_single_behavior(pCell, "debris_apoptotic export", (*export_rates)[1]);
     return;
@@ -134,12 +120,12 @@ void prototype_domain_edge_avoidance_interactions(Cell* pCell, Phenotype& phenot
     }
     phenotype.mechanics.cell_BM_repulsion_strength = 100;
 
-    //Note that the distance_to_membrane function must set displacement values (as a normal vector)
+    // note that the distance_to_membrane function must set displacement values (as a normal vector)
     double distance = pCell->functions.calculate_distance_to_membrane(pCell,phenotype,dt);
     double radius = phenotype.geometry.radius;
     if (radius < 9) { radius = 9; }
 
-    // Repulsion from basement membrane
+    // repulsion from basement membrane
     double temp_r = 0;
     if (distance < radius) {
         temp_r = (1 - distance / radius);
@@ -240,7 +226,7 @@ void cell_arrival_function(double dt) {
         }
         else { no_signal = true; }  // no arrival substrate defined for this cell type
         if (!no_signal) {
-            // Update the probabilities of arriving in each voxel selected according to the signal of substrate
+            // update the probabilities of arriving in each voxel selected according to the signal of substrate
             index_substrate = microenvironment.find_density_index(parameters.strings(arrival_substrate_name));
             total_weight = 0.0;
             for (unsigned int n = 0; n < arrival_voxel_indexes.size(); n++) {
@@ -250,8 +236,8 @@ void cell_arrival_function(double dt) {
             }
         }
 
-        // Normalize the probabilities, update the microenvironment and generate cells according to the arrival rate (0, max_arrival_rate)
-        // Note that sum of individual poisson events is a poisson event with rate equal to the sum of the individual rates
+        // normalize the probabilities, update the microenvironment and generate cells according to the arrival rate (0, max_arrival_rate)
+        // note that sum of individual poisson events is a poisson event with rate equal to the sum of the individual rates
         for (unsigned int n = 0; n < arrival_voxel_indexes.size(); n++) {
             if (total_weight > 1e-16) { arrival_voxel_probabilities[n] /= total_weight; }  // avoid division by zero
             else {
@@ -284,7 +270,7 @@ void cell_departure_function(double dt) {
     double substrate_at_voxel;
     //Cell* pC = NULL;
 
-    // Find cells to depart from the domain
+    // find cells to depart from the domain
     for (int k=0; k < cell_definitions_by_index.size() ; k++) {
         Cell_Definition* pCD = cell_definitions_by_index[k];
 
@@ -309,7 +295,7 @@ void cell_departure_function(double dt) {
         }
         else { no_signal = true; } // no departure substrate defined for this cell type
         if (!no_signal) {
-            // Update the probabilities of departing in each voxel selected according to the signal of substrate
+            // update the probabilities of departing in each voxel selected according to the signal of substrate
             index_substrate = microenvironment.find_density_index(parameters.strings(departure_substrate_name));
             total_weight = 0.0;
             for (unsigned int n = 0; n < departure_voxel_indexes.size(); n++) {
@@ -319,8 +305,8 @@ void cell_departure_function(double dt) {
             }
         }
 
-        // Normalize the probabilities, update the microenvironment and generate cells according to the departure rate (0, max_departure_rate)
-        // Note that sum of individual poisson events is a poisson event with rate equal to the sum of the individual rates
+        // normalize the probabilities, update the microenvironment and generate cells according to the departure rate (0, max_departure_rate)
+        // note that sum of individual poisson events is a poisson event with rate equal to the sum of the individual rates
         for (unsigned int n = 0; n < departure_voxel_indexes.size();  n++) {
             if (total_weight > 1e-16) { departure_voxel_probabilities[n] /= total_weight; } // avoid division by zero
             else {
@@ -334,7 +320,7 @@ void cell_departure_function(double dt) {
             int departure_prob_idx = microenvironment.find_density_index(pCD->name + "_departure_prob");
             microenvironment.density_vector(departure_voxel_indexes[n])[departure_prob_idx] = parameters.doubles(departure_rate_name) * departure_voxel_probabilities[n] * dt;
 
-            // Find the mechanic voxel index corresponding to the microenvironment voxel index
+            // find the mechanic voxel index corresponding to the microenvironment voxel index
             int mechanic_voxel_index = ((Cell_Container *)microenvironment.agent_container)->underlying_mesh.nearest_voxel_index(microenvironment.mesh.voxels[departure_voxel_indexes[n]].center);
             auto &cells = ((Cell_Container *)microenvironment.agent_container)->agent_grid[mechanic_voxel_index];
             for (BioFVM::Basic_Agent* p_agent : cells) {
@@ -502,60 +488,32 @@ void contact_function(Cell* pMe, Phenotype& phenoMe, Cell* pOther, Phenotype& ph
 // bue 20251014: pwn efferocytosis impelentation (updated in intracellular function)
 void efferocytosis(double dt) {
     // description:
-    //   function digest engulfed dying bodies and ingested debris.
+    //   function digest first necrotic engulfed dying bodies and ingested debris then apoptotic.
     //   realted literature from zent and elliott 2016/17 https://doi.org/10.1111/febs.13961
 
     // digestin rate constant
     double hunger = (2.5 / 60) * dt;  // 10/4[cell_solid/h] = 2.5[cell_solid/h] = 0.041666[cell_solid/min] executed every dt [min]
 
     // BioFVM Indices
-    static int debris_index = microenvironment.find_density_index("debris");
     static int debris_apoptotic_index = microenvironment.find_density_index("debris_apoptotic");
     static int debris_necrotic_index = microenvironment.find_density_index("debris_necrotic");
 
     #pragma omp parallel for
     for (Cell* pCell: (*all_cells)) {
         // extract values
-        double food_debris = 0;
         double food_debris_apoptotic = 0;
         double food_debris_necrotic = 0;
-        if (debris_index > -1) { food_debris = pCell->phenotype.molecular.internalized_total_substrates[debris_index]; }
         if (debris_apoptotic_index > -1) { food_debris_apoptotic = pCell->phenotype.molecular.internalized_total_substrates[debris_apoptotic_index]; }
         if (debris_necrotic_index > -1) { food_debris_necrotic = pCell->phenotype.molecular.internalized_total_substrates[debris_necrotic_index]; }
 
-        // digest engulfed
-        if (hunger > pCell->custom_data["engulfed"]) {
-            hunger = hunger - pCell->custom_data["engulfed"];
-            pCell->custom_data["engulfed"] = 0;
+        // digest engulfed_necrotic
+        if (hunger > pCell->custom_data["engulfed_necrotic"]) {
+            hunger = hunger - pCell->custom_data["engulfed_necrotic"];
+            pCell->custom_data["engulfed_necrotic"] = 0;
         }
         else {
-           pCell->custom_data["engulfed"] = pCell->custom_data["engulfed"] - hunger;
+           pCell->custom_data["engulfed_necrotic"] = pCell->custom_data["engulfed_necrotic"] - hunger;
            hunger = 0;
-        }
-
-        // digest debris
-        if (debris_index > -1) {
-            if (hunger > food_debris) {
-                hunger = hunger - food_debris;
-                food_debris = 0;
-            }
-            else {
-                food_debris = food_debris - hunger;
-                hunger = 0;
-            }
-            pCell->phenotype.molecular.internalized_total_substrates[debris_index] = food_debris;
-        }
-        // digest debris apoptotic
-        if (debris_apoptotic_index > -1) {
-            if (hunger > food_debris_apoptotic) {
-                hunger = hunger - food_debris_apoptotic;
-                food_debris_apoptotic = 0;
-            }
-            else {
-                food_debris_apoptotic = food_debris_apoptotic - hunger;
-                hunger = 0;
-            }
-            pCell->phenotype.molecular.internalized_total_substrates[debris_apoptotic_index] = food_debris_apoptotic;
         }
         // digest debris_necrotic
         if (debris_necrotic_index > -1) {
@@ -570,8 +528,30 @@ void efferocytosis(double dt) {
             pCell->phenotype.molecular.internalized_total_substrates[debris_necrotic_index] = food_debris_necrotic;
         }
 
+        // digest engulfed_apoptotic
+        if (hunger > pCell->custom_data["engulfed_apoptotic"]) {
+            hunger = hunger - pCell->custom_data["engulfed_apoptotic"];
+            pCell->custom_data["engulfed_apoptotic"] = 0;
+        }
+        else {
+           pCell->custom_data["engulfed_apoptotic"] = pCell->custom_data["engulfed_apoptotic"] - hunger;
+           hunger = 0;
+        }
+        // digest debris apoptotic
+        if (debris_apoptotic_index > -1) {
+            if (hunger > food_debris_apoptotic) {
+                hunger = hunger - food_debris_apoptotic;
+                food_debris_apoptotic = 0;
+            }
+            else {
+                food_debris_apoptotic = food_debris_apoptotic - hunger;
+                hunger = 0;
+            }
+            pCell->phenotype.molecular.internalized_total_substrates[debris_apoptotic_index] = food_debris_apoptotic;
+        }
+
         // update debris_total
-        pCell->custom_data["debris_total"] = pCell->custom_data["engulfed"] + food_debris + food_debris_apoptotic + food_debris_necrotic;
+        pCell->custom_data["debris_total"] = pCell->custom_data["engulfed_necrotic"] + food_debris_necrotic + pCell->custom_data["engulfed_apoptotic"] + food_debris_apoptotic;
 
         // output
         //if (pCell->custom_data["debris_total"] > 9) {
