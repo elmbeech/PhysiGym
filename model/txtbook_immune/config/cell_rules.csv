@@ -1,0 +1,41 @@
+epithelial,pressure,decreases,cycle entry,0.0,0.25,3,0
+t_cd8,pressure,decreases,cycle entry,0.0,0.25,3,0
+epithelial,pressure,decreases,migration speed,0.0,8.0,2,0
+mac_m1,pressure,decreases,migration speed,0.1,8.0,2,0
+mac_m2,pressure,decreases,migration speed,0.1,8.0,2,0
+t_cd8,pressure,decreases,migration speed,0.1,8.0,2,0
+mac_m1,debris_apoptotic,increases,migration speed,10.0,0.5,2,0
+mac_m2,debris_apoptotic,increases,migration speed,10.0,0.5,2,0
+mac_m1,debris_necrotic,increases,migration speed,10.0,0.5,2,0
+mac_m2,debris_necrotic,increases,migration speed,10.0,0.5,2,0
+t_cd8,il12,increases,migration speed,10.0,0.5,2,0
+epithelial,shikonin,increases,necrosis,0.000531667,0.5,2,0
+mac_m1,debris_necrotic,increases,cxcl10 secretion,1.0,0.5,2,0
+mac_m1,contact with dead cell,decreases,migration speed,0.1,0.1,2,0
+mac_m2,contact with dead cell,decreases,migration speed,0.1,0.1,2,0
+t_cd8,contact with epithelial,decreases,migration speed,0.1,0.1,2,0
+epithelial,damage,increases,apoptosis,0.023,45,16,0
+mac_m1,custom:debris_total,increases,debris_apoptotic uptake,0.2,1.0,8,0
+mac_m2,custom:debris_total,increases,debris_apoptotic uptake,0.2,1.0,8,0
+mac_m1,custom:debris_total,increases,debris_necrotic uptake,0.2,1.0,8,0
+mac_m2,custom:debris_total,increases,debris_necrotic uptake,0.2,1.0,8,0
+mac_m1,custom:debris_total,increases,phagocytose apoptotic cell,0.2,1.0,8,0
+mac_m2,custom:debris_total,increases,phagocytose apoptotic cell,0.2,1.0,8,0
+mac_m1,custom:debris_total,increases,phagocytose necrotic cell,0.2,1.0,8,0
+mac_m2,custom:debris_total,increases,phagocytose necrotic cell,0.2,1.0,8,0
+mac_m1,custom:debris_total,decreases,debris_apoptotic uptake,0.0,8.0,16,0
+mac_m2,custom:debris_total,decreases,debris_apoptotic uptake,0.0,8.0,16,0
+mac_m1,custom:debris_total,decreases,debris_necrotic uptake,0.0,8.0,16,0
+mac_m2,custom:debris_total,decreases,debris_necrotic uptake,0.0,8.0,16,0
+mac_m1,custom:debris_total,decreases,phagocytose apoptotic cell,0.0,8.0,16,0
+mac_m2,custom:debris_total,decreases,phagocytose apoptotic cell,0.0,8.0,16,0
+mac_m1,custom:debris_total,decreases,phagocytose necrotic cell,0.0,8.0,16,0
+mac_m2,custom:debris_total,decreases,phagocytose necrotic cell,0.0,8.0,16,0
+mac_m1,contact with apoptotic cell,increases,transform to mac_m2,0.0006944444444444445,0.1,10,0
+mac_m2,contact with apoptotic cell,decreases,transform to mac_m1,0.0,0.1,10,0
+mac_m2,contact with necrotic cell,increases,transform to mac_m1,0.0006944444444444445,0.1,10,0
+mac_m1,contact with necrotic cell,decreases,transform to mac_m2,0.0,0.1,10,0
+mac_m1,debris_apoptotic,increases,transform to mac_m2,0.0006944444444444445,0.1,10,0
+mac_m2,debris_apoptotic,decreases,transform to mac_m1,0.0,0.1,10,0
+mac_m2,debris_necrotic,increases,transform to mac_m1,0.0006944444444444445,0.1,10,0
+mac_m1,debris_necrotic,decreases,transform to mac_m2,0.0,0.1,10,0

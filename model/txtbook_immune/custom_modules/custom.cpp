@@ -488,7 +488,7 @@ void contact_function(Cell* pMe, Phenotype& phenoMe, Cell* pOther, Phenotype& ph
 // bue 20251014: pwn efferocytosis impelentation (updated in intracellular function)
 void efferocytosis(double dt) {
     // description:
-    //   function digest first necrotic engulfed dying bodies and ingested debris then apoptotic.
+    //   function digest first necrotic engulfed dying bodies and ingested debris then apoptotic the the rest.
     //   realted literature from zent and elliott 2016/17 https://doi.org/10.1111/febs.13961
 
     // digestin rate constant
